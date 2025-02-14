@@ -29,9 +29,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from configs import GRPOConfig
 from rewards import REWARD_FUNCS_REGISTRY
 from utils.callbacks import get_callbacks
-from x_grpo_trainer import XGRPOTrainer
-from trl import ModelConfig, ScriptArguments, TrlParser, get_peft_config
 from grpo_trainer import GRPOTrainerExt
+from trl import ModelConfig, ScriptArguments, TrlParser, get_peft_config
 
 
 logger = logging.getLogger(__name__)
@@ -121,19 +120,22 @@ def main(script_args, training_args, model_args):
     model_kwargs = dict(
         revision=model_args.model_revision,
         trust_remote_code=model_args.trust_remote_code,
-        attn_implementation=model_args.attn_implementation,
+        attn_implementation="eager",
         torch_dtype=torch_dtype,
         use_cache=False if training_args.gradient_checkpointing else True,
     )
 
-    model = AutoModelForCausalLM.from_pretrained( model_args.model_name_or_path, load_in_4bit=False, **model_kwargs)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_args.model_name_or_path, 
+        load_in_4bit=False, 
+        **model_kwargs
+    )
 
     print(model_args.model_name_or_path,)
     #############################
     # Initialize the XGRPO trainer
     #############################
     trainer = GRPOTrainerExt(
-        # model=model_args.model_name_or_path,
         model = model,
         reward_funcs=reward_funcs,
         args=training_args,
