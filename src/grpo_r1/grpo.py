@@ -31,6 +31,7 @@ from rewards import REWARD_FUNCS_REGISTRY
 from utils.callbacks import get_callbacks
 from x_grpo_trainer import XGRPOTrainer
 from trl import ModelConfig, ScriptArguments, TrlParser, get_peft_config
+from grpo_trainer import GRPOTrainerExt
 
 
 logger = logging.getLogger(__name__)
@@ -131,7 +132,7 @@ def main(script_args, training_args, model_args):
     #############################
     # Initialize the XGRPO trainer
     #############################
-    trainer = XGRPOTrainer(
+    trainer = GRPOTrainerExt(
         # model=model_args.model_name_or_path,
         model = model,
         reward_funcs=reward_funcs,

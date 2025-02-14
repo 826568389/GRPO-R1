@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-'''https://github.com/dhcode-cpp/X-R1'''
+'''https://github.com/826568389/GRPO-R1'''
 '''modify to print online sampling string'''
 
 import os
@@ -43,7 +43,7 @@ from trl.trainer.utils import  pad
 RewardFunc = Union[str, PreTrainedModel, Callable[[list, list], list[float]]]
 
 
-class XGRPOTrainer(GRPOTrainer):
+class GRPOTrainerExt(GRPOTrainer):
     # base trl GRPO_trainer
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         if return_outputs:
