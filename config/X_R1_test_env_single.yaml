@@ -1,0 +1,49 @@
+# This is X-R1(https://github.com/dhcode-cpp/X-R1) project training config:
+# required >  4x3090(24G)/4090(24G)
+# running time ~1h
+
+# Model arguments
+model_name_or_path: Qwen/Qwen2.5-0.5B
+model_revision: main
+torch_dtype: bfloat16
+
+# Data training arguments
+dataset_name: xiaodongguaAIGC/X-R1-750 #  750 / 1500 / 7500
+dataset_configs:
+- train
+num_processes: 1
+
+# GRPO trainer config
+bf16: true
+use_vllm: false
+vllm_device: auto
+vllm_gpu_memory_utilization: 0.7
+do_eval: no
+eval_strategy: "no"
+eval_steps: 10
+gradient_accumulation_steps: 1
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+hub_model_id: Qwen/Qwen2.5-0.5B
+hub_strategy: every_save
+learning_rate: 3.0e-06
+log_level: info
+logging_steps: 10
+logging_strategy: steps
+lr_scheduler_type: cosine
+max_prompt_length: 256
+num_generations: 1
+max_completion_length: 128
+max_steps: 10
+num_train_epochs: 1
+output_dir: output/X-R1-test
+overwrite_output_dir: true
+per_device_eval_batch_size: 1
+per_device_train_batch_size: 1
+push_to_hub: False
+report_to:
+- wandb
+save_strategy: "epoch"
+seed: 42
+warmup_ratio: 0.1
