@@ -42,14 +42,11 @@ pip install -e ".[dev]"  # 开发模式安装
 
 4. 运行训练:
 ```bash
-# 训练 0.5B 模型
-bash bin/run_grpo_r1_qwen0.5b.sh
-
-# 训练 1.5B 模型
-bash bin/run_grpo_r1_qwen1.5b.sh
-
-# 训练 3B 模型
-bash bin/run_grpo_r1_qwen3b.sh
+# 使用统一的训练脚本，指定模型大小
+bash bin/run_grpo.sh 0.5b  # 训练 0.5B 模型
+bash bin/run_grpo.sh 1.5b  # 训练 1.5B 模型
+bash bin/run_grpo.sh 3b    # 训练 3B 模型
+bash bin/run_grpo.sh 7b    # 训练 7B 模型
 ```
 
 ## 项目结构
