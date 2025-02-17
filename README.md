@@ -55,9 +55,9 @@ bash bin/run_grpo.sh 7b    # 训练 7B 模型
 .
 ├── bin/            # 训练脚本
 ├── config/         # 配置文件
-│   ├── GRPO1.yaml     # ZeRO-1 配置
-│   ├── GRPO2.yaml     # ZeRO-2 配置
-│   ├── GRPO3.yaml     # ZeRO-3 配置
+│   ├── zero1.yaml     # ZeRO-1 配置
+│   ├── zero2.yaml     # ZeRO-2 配置
+│   ├── zero3.yaml     # ZeRO-3 配置
 │   └── GRPO_R1_*.yaml # 模型训练配置
 ├── src/           # 源代码
 │   └── grpo_r1/   # 核心实现
