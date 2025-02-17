@@ -1,13 +1,13 @@
 
 
 # Model arguments
-model_name_or_path: Qwen/Qwen2.5-1.5B
+model_name_or_path: /data/staryea/aigc_model/Qwen2.5-1.5B-Instruct  # 模型路径
 model_revision: main
 torch_dtype: bfloat16
 attn_implementation: flash_attention_2
 
 # Data training arguments
-dataset_name: xiaodongguaAIGC/X-R1-750
+dataset_name: /data/staryea/DeepSeek/dataset/xiaodongguaAIGC/X-R1-750  # 数据集路径
 dataset_configs:
 - train
 num_processes: 3
@@ -17,7 +17,7 @@ num_processes: 3
 bf16: true
 use_vllm: true
 vllm_device: auto
-vllm_gpu_memory_utilization: 0.7
+vllm_gpu_memory_utilization: 0.3
 do_eval: false
 eval_strategy: "no"
 eval_steps: 10
