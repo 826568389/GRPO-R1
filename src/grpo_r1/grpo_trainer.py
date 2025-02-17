@@ -32,8 +32,8 @@ from transformers import (
 from trl.trainer import GRPOTrainer
 from trl.data_utils import apply_chat_template, is_conversational, maybe_apply_chat_template
 from trl.models import unwrap_model_for_generation
-from trl.trainer.grpo_config import GRPOConfig
-from trl.trainer.utils import  pad
+from trl import GRPOConfig
+from trl.trainer.utils import pad
 
 
 
@@ -278,9 +278,21 @@ class GRPOTrainerExt(GRPOTrainer):
         """
         super().__init__(*args, **kwargs)
         self._metrics = defaultdict(list)
-        # 初始化各种指标的记录列表
+        
+        # 初始化所有可能的指标
         self._metrics["clip_ratio"] = []          # 梯度裁剪比例
         self._metrics["completion_length"] = []    # 补全文本的平均长度
         self._metrics["over_length_ratio"] = []    # 超过最大长度限制的比例
         self._metrics["max_completion_length"] = [] # 补全文本的最大长度
         self._metrics["min_completion_length"] = [] # 补全文本的最小长度
+        self._metrics["reward"] = []               # 总奖励
+        self._metrics["reward_std"] = []           # 奖励标准差
+        self._metrics["kl"] = []                   # KL散度
+        
+        # 为每个奖励函数初始化指标
+        for reward_func in self.reward_funcs:
+            if isinstance(reward_func, PreTrainedModel):
+                reward_func_name = reward_func.config._name_or_path.split("/")[-1]
+            else:
+                reward_func_name = reward_func.__name__
+            self._metrics[f"rewards/{reward_func_name}"] = []
