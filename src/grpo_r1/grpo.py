@@ -1,16 +1,7 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+"""
+GRPO-R1的主要训练脚本
+实现了模型训练的主要流程，包括数据加载、模型初始化、训练循环等
+"""
 
 import logging
 import os
@@ -38,15 +29,19 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class GRPOScriptArguments(ScriptArguments):
+    """
+    GRPO训练脚本的参数配置类
+    继承自TRL的ScriptArguments，添加了奖励函数相关的配置
+    """
     reward_funcs: list[str] = field(
         default_factory=lambda: ["accuracy", "format"],
-        # default_factory=lambda: ["accuracy", ],
         metadata={
-            "help": f"List of reward functions. Possible values: {', '.join(REWARD_FUNCS_REGISTRY.keys())}"
+            "help": f"奖励函数列表，可选值: {', '.join(REWARD_FUNCS_REGISTRY.keys())}"
         },
     )
 
 
+# 系统提示词，用于构建对话格式
 SYSTEM_PROMPT = (
     "A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant "
     "first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning "
@@ -56,12 +51,18 @@ SYSTEM_PROMPT = (
 
 
 def main(script_args, training_args, model_args):
-    # Set seed for reproducibility
+    """
+    主训练函数
+    
+    参数:
+        script_args: 脚本参数，包含数据集配置、奖励函数等
+        training_args: 训练参数，包含学习率、批次大小等
+        model_args: 模型参数，包含模型路径、类型等
+    """
+    # 设置随机种子以确保可重复性
     set_seed(training_args.seed)
 
-    ###############
-    # Setup logging
-    ###############
+    # 设置日志配置
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
@@ -74,30 +75,31 @@ def main(script_args, training_args, model_args):
     transformers.utils.logging.enable_default_handler()
     transformers.utils.logging.enable_explicit_format()
 
-    # Log on each process a small summary
+    # 在每个进程上记录简要信息
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f" distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        f"进程排名: {training_args.local_rank}, 设备: {training_args.device}, GPU数量: {training_args.n_gpu}"
+        + f" 分布式训练: {bool(training_args.local_rank != -1)}, 16位训练: {training_args.fp16}"
     )
-    logger.info(f"Model parameters {model_args}")
-    logger.info(f"Script parameters {script_args}")
-    logger.info(f"Data parameters {training_args}")
+    logger.info(f"模型参数 {model_args}")
+    logger.info(f"脚本参数 {script_args}")
+    logger.info(f"数据参数 {training_args}")
 
-    # Check for last checkpoint
+    # 检查最新的检查点
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
     if last_checkpoint is not None and training_args.resume_from_checkpoint is None:
-        logger.info(f"Checkpoint detected, resuming training at {last_checkpoint=}.")
+        logger.info(f"检测到检查点，从 {last_checkpoint} 恢复训练。")
 
-    # Load the dataset
+    # 加载数据集
     dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
 
-    # Get reward functions
+    # 获取奖励函数
     reward_funcs = [REWARD_FUNCS_REGISTRY[func] for func in script_args.reward_funcs]
 
-    # Format into conversation
+    # 将数据格式化为对话格式
     def make_conversation(example):
+        """将示例转换为对话格式"""
         return {
             "prompt": [
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -110,8 +112,8 @@ def main(script_args, training_args, model_args):
         if "messages" in dataset[split].column_names:
             dataset[split] = dataset[split].remove_columns("messages")
 
-
-    logger.info("*** Initializing model kwargs ***")
+    # 初始化模型参数
+    logger.info("*** 初始化模型参数 ***")
     torch_dtype = (
         model_args.torch_dtype if model_args.torch_dtype in ["auto", None] else getattr(torch, model_args.torch_dtype)
     )
@@ -125,6 +127,7 @@ def main(script_args, training_args, model_args):
         use_cache=False if training_args.gradient_checkpointing else True,
     )
 
+    # 加载预训练模型
     model = AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path, 
         load_in_4bit=False, 
@@ -132,9 +135,8 @@ def main(script_args, training_args, model_args):
     )
 
     print(model_args.model_name_or_path,)
-    #############################
-    # Initialize the GRPO-R1 trainer
-    #############################
+
+    # 初始化GRPO-R1训练器
     trainer = GRPOTrainerExt(
         model = model,
         reward_funcs=reward_funcs,
@@ -144,10 +146,8 @@ def main(script_args, training_args, model_args):
         callbacks=get_callbacks(training_args, model_args),
     )
 
-    ###############
-    # Training loop
-    ###############
-    logger.info("*** Train ***")
+    # 开始训练
+    logger.info("*** 开始训练 ***")
     checkpoint = None
     if training_args.resume_from_checkpoint is not None:
         checkpoint = training_args.resume_from_checkpoint
@@ -160,26 +160,25 @@ def main(script_args, training_args, model_args):
     trainer.save_metrics("train", metrics)
     trainer.save_state()
 
-    ##################################
-    # Save model and create model card
-    ##################################
-    logger.info("*** Save model ***")
+    # 保存模型和创建模型卡片
+    logger.info("*** 保存模型 ***")
     trainer.save_model(training_args.output_dir)
-    logger.info(f"Model saved to {training_args.output_dir}")
+    logger.info(f"模型已保存到 {training_args.output_dir}")
 
-    # Save everything else on main process
+    # 在主进程上保存其他内容
     kwargs = {
         "dataset_name": script_args.dataset_name,
         "tags": ["GRPO-R1"],
     }
     if trainer.accelerator.is_main_process:
         trainer.create_model_card(**kwargs)
-        # Restore k,v cache for fast inference
+        # 恢复k,v缓存以加速推理
         trainer.model.config.use_cache = True
         trainer.model.config.save_pretrained(training_args.output_dir)
 
 
 if __name__ == "__main__":
+    # 解析命令行参数并启动训练
     parser = TrlParser((GRPOScriptArguments, GRPOConfig, ModelConfig))
     script_args, training_args, model_args = parser.parse_args_and_config()
     main(script_args, training_args, model_args)

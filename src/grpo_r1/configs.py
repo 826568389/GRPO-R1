@@ -13,6 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+GRPO-R1的配置模块
+定义了训练过程中需要的各种配置类
+"""
+
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -23,44 +28,64 @@ import trl
 @dataclass
 class GRPOConfig(trl.GRPOConfig):
     """
-    args for callbacks, benchmarks etc
+    GRPO算法的配置类
+    继承自TRL库的GRPOConfig，添加了回调函数、基准测试等额外配置
     """
 
     benchmarks: list[str] = field(
-        default_factory=lambda: [], metadata={"help": "The benchmarks to run after training."}
+        default_factory=lambda: [], 
+        metadata={"help": "训练后要运行的基准测试列表"}
     )
     callbacks: list[str] = field(
-        default_factory=lambda: [], metadata={"help": "The callbacks to run during training."}
+        default_factory=lambda: [], 
+        metadata={"help": "训练过程中要运行的回调函数列表"}
     )
     system_prompt: Optional[str] = field(
-        default=None, metadata={"help": "The optional system prompt to use for benchmarking."}
+        default=None, 
+        metadata={"help": "基准测试中使用的可选系统提示词"}
     )
     hub_model_revision: Optional[str] = field(
-        default="main", metadata={"help": "The Hub model branch to push the model to."}
+        default="main", 
+        metadata={"help": "模型推送到Hub时使用的分支名称"}
     )
-    overwrite_hub_revision: bool = field(default=False, metadata={"help": "Whether to overwrite the Hub revision."})
-    push_to_hub_revision: bool = field(default=False, metadata={"help": "Whether to push to a Hub revision/branch."})
+    overwrite_hub_revision: bool = field(
+        default=False, 
+        metadata={"help": "是否覆盖Hub上的现有版本"}
+    )
+    push_to_hub_revision: bool = field(
+        default=False, 
+        metadata={"help": "是否推送到Hub的特定分支/版本"}
+    )
 
 
 @dataclass
 class SFTConfig(trl.SFTConfig):
     """
-    args for callbacks, benchmarks etc
+    监督微调(SFT)的配置类
+    继承自TRL库的SFTConfig，添加了额外的配置选项
     """
 
     benchmarks: list[str] = field(
-        default_factory=lambda: [], metadata={"help": "The benchmarks to run after training."}
+        default_factory=lambda: [], 
+        metadata={"help": "训练后要运行的基准测试列表"}
     )
     callbacks: list[str] = field(
-        default_factory=lambda: [], metadata={"help": "The callbacks to run during training."}
+        default_factory=lambda: [], 
+        metadata={"help": "训练过程中要运行的回调函数列表"}
     )
     system_prompt: Optional[str] = field(
         default=None,
-        metadata={"help": "The optional system prompt to use for benchmarking."},
+        metadata={"help": "基准测试中使用的可选系统提示词"},
     )
     hub_model_revision: Optional[str] = field(
         default="main",
-        metadata={"help": "The Hub model branch to push the model to."},
+        metadata={"help": "模型推送到Hub时使用的分支名称"},
     )
-    overwrite_hub_revision: bool = field(default=False, metadata={"help": "Whether to overwrite the Hub revision."})
-    push_to_hub_revision: bool = field(default=False, metadata={"help": "Whether to push to a Hub revision/branch."})
+    overwrite_hub_revision: bool = field(
+        default=False, 
+        metadata={"help": "是否覆盖Hub上的现有版本"}
+    )
+    push_to_hub_revision: bool = field(
+        default=False, 
+        metadata={"help": "是否推送到Hub的特定分支/版本"}
+    )

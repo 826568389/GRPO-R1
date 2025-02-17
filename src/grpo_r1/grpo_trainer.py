@@ -44,24 +44,45 @@ RewardFunc = Union[str, PreTrainedModel, Callable[[list, list], list[float]]]
 
 
 class GRPOTrainerExt(GRPOTrainer):
-    # base trl GRPO_trainer
+    """
+    GRPO训练器的扩展类
+    继承自基础的GRPOTrainer，添加了额外的功能和指标跟踪
+    """
+    
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        """
+        计算训练损失的核心方法
+        
+        参数:
+            model: 要训练的模型
+            inputs: 输入数据
+            return_outputs: 是否返回输出（本实现不支持）
+            num_items_in_batch: 批次中的项目数量
+            
+        返回:
+            计算得到的损失值
+        """
+        # 不支持返回输出
         if return_outputs:
             raise ValueError("The GRPOTrainer does not support returning outputs")
 
+        # 获取设备并处理输入提示
         device = self.accelerator.device
         prompts = [x["prompt"] for x in inputs]
         prompts_text = [maybe_apply_chat_template(example, self.processing_class)["prompt"] for example in inputs]
+        
+        # 准备输入数据
         prompt_inputs = self.processing_class(
             prompts_text, return_tensors="pt", padding=True, padding_side="left", add_special_tokens=False
         )
         prompt_inputs = super()._prepare_inputs(prompt_inputs)
 
+        # 如果设置了最大提示长度，则截断输入
         if self.max_prompt_length is not None:
             prompt_inputs["input_ids"] = prompt_inputs["input_ids"][:, -self.max_prompt_length :]
             prompt_inputs["attention_mask"] = prompt_inputs["attention_mask"][:, -self.max_prompt_length :]
 
-        # Generate completions using either vLLM or regular generation
+        # 使用vLLM或常规生成方式生成补全文本
         if self.args.use_vllm:
             # First, have main process load weights if needed
             if self.state.global_step != self._last_loaded_step:
@@ -119,6 +140,14 @@ class GRPOTrainerExt(GRPOTrainer):
 
         # Get the per-token log probabilities for the completions for the model and the reference model
         def get_per_token_logps(model, input_ids, num_logits_to_keep):
+            """
+            计算每个token的对数概率
+            
+            参数:
+                model: 用于计算的模型
+                input_ids: 输入token IDs
+                num_logits_to_keep: 要保留的logits数量
+            """
             # We add 1 to `num_logits_to_keep` because the last logits of the sequence is later excluded
             logits = model(input_ids, num_logits_to_keep=num_logits_to_keep + 1).logits  # (B, L, V)
             logits = logits[:, :-1, :]  # (B, L-1, V), exclude the last logit: it corresponds to the next token pred
@@ -205,14 +234,14 @@ class GRPOTrainerExt(GRPOTrainer):
         # Log the metrics
         completion_length = self.accelerator.gather_for_metrics(completion_mask.sum(1)).float()
         mean_completion_length = completion_length.mean().item()
-        self._metrics["completion_length"].append(mean_completion_length)
+        self._metrics["completion_length"].append(mean_completion_length)  # 记录平均补全长度
 
         # 计算超出最大长度的比例
         max_length = self.args.max_completion_length
         over_length_ratio = (completion_length >= max_length).float().mean().item()
-        self._metrics["over_length_ratio"].append(over_length_ratio)
+        self._metrics["over_length_ratio"].append(over_length_ratio)  # 记录超长比例
 
-        # 记录最大和最小长度
+        # 记录最大和最小补全长度
         self._metrics["max_completion_length"].append(completion_length.max().item())
         self._metrics["min_completion_length"].append(completion_length.min().item())
 
@@ -238,16 +267,20 @@ class GRPOTrainerExt(GRPOTrainer):
                 self.args.max_grad_norm
             )
             clip_ratio = (total_grad_norm / self.args.max_grad_norm).item()
-            self._metrics["clip_ratio"].append(clip_ratio)  # 记录 clip ratio
+            self._metrics["clip_ratio"].append(clip_ratio)  # 记录梯度裁剪比例
 
         return loss
 
     def __init__(self, *args, **kwargs):
+        """
+        初始化GRPO训练器扩展类
+        设置各种指标的跟踪器
+        """
         super().__init__(*args, **kwargs)
         self._metrics = defaultdict(list)
-        # ... existing code ...
-        self._metrics["clip_ratio"] = []  # 初始化 clip ratio 记录列表
-        self._metrics["completion_length"] = []      # 平均长度
-        self._metrics["over_length_ratio"] = []      # 超长比例
-        self._metrics["max_completion_length"] = []  # 最大长度
-        self._metrics["min_completion_length"] = []  # 最小长度
+        # 初始化各种指标的记录列表
+        self._metrics["clip_ratio"] = []          # 梯度裁剪比例
+        self._metrics["completion_length"] = []    # 补全文本的平均长度
+        self._metrics["over_length_ratio"] = []    # 超过最大长度限制的比例
+        self._metrics["max_completion_length"] = [] # 补全文本的最大长度
+        self._metrics["min_completion_length"] = [] # 补全文本的最小长度
