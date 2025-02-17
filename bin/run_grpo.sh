@@ -50,7 +50,7 @@ GPU_NUM=3
 echo "Starting training for ${MODEL_SIZE} model..."
 echo "tail -f ${OUTPUT_DIR}/grpo_r1_${CONFIG_NAME}_sampling.log 查看训练日志" 
 accelerate launch \
-    --config_file "${PROJECT_ROOT}/config/GRPO3.yaml" \
+    --config_file "${PROJECT_ROOT}/config/zero3.yaml" \
     --num_processes="${GPU_NUM}" "${PROJECT_ROOT}/src/grpo_r1/grpo.py" \
     --config "${PROJECT_ROOT}/config/GRPO_R1_zero_${CONFIG_NAME}_config.yaml" \
     > "${OUTPUT_DIR}/grpo_r1_${CONFIG_NAME}_sampling.log" 2>&1 
