@@ -4,6 +4,7 @@ GRPO训练中使用的奖励函数模块
 """
 
 import re
+from typing import Dict
 
 from latex2sympy2_extended import NormalizationConfig
 from math_verify import LatexExtractionConfig, parse, verify
@@ -111,10 +112,83 @@ def reasoning_steps_reward(completions, **kwargs):
     # 使用魔法数字3作为标准步骤数，超过3步给满分，否则按比例给分
     return [min(1.0, count / 3) for count in matches]
 
+def length_reward(completions: list[Dict[str, str]], solutions: list[str], **kwargs) -> float:
+    """
+    根据答案正确度和长短进行奖励的奖励函数
+    
+    按以下公式计算奖励:
+    - 正确答案：reward = 0.5 - (len - min_len)/(max_len - min_len)
+    - 错误答案：reward = min(0, 0.5 - (len - min_len)/(max_len - min_len))
+    
+    参数:
+        completions: 模型生成的完成序列列表
+        **kwargs: 其他参数
+        
+    返回:
+        rewards: 每个完成序列的奖励值列表，值在0-0.5之间
+    """
+    contents = [completion[0]["content"] for completion in completions]
+
+    # First check correctness of answers
+    correctness = []
+    for content, sol in zip(contents, solutions):
+        gold_parsed = parse(
+            sol,
+            extraction_mode="first_match",
+            extraction_config=[LatexExtractionConfig()],
+        )
+        if len(gold_parsed) == 0:
+            # Skip unparseable examples
+            correctness.append(True)  # Treat as correct to avoid penalizing
+            print("Failed to parse gold solution: ", sol)
+            continue
+
+        answer_parsed = parse(
+            content,
+            extraction_config=[
+                LatexExtractionConfig(
+                    normalization_config=NormalizationConfig(
+                        nits=False,
+                        malformed_operators=False,
+                        basic_latex=True,
+                        equations=True,
+                        boxed=True,
+                        units=True,
+                    ),
+                    boxed_match_priority=0,
+                    try_extract_without_anchor=False,
+                )
+            ],
+            extraction_mode="first_match",
+        )
+        correctness.append(verify(answer_parsed, gold_parsed))
+
+    # Calculate lengths
+    lengths = [len(content) for content in contents]
+    min_len = min(lengths)
+    max_len = max(lengths)
+
+    # If all responses have the same length, return zero rewards
+    if max_len == min_len:
+        return [0.0] * len(completions)
+
+    rewards = []
+    for length, is_correct in zip(lengths, correctness):
+        lambda_val = 0.5 - (length - min_len) / (max_len - min_len)
+
+        if is_correct:
+            reward = lambda_val
+        else:
+            reward = min(0, lambda_val)
+
+        rewards.append(float(reward))
+
+    return rewards
 
 # 奖励函数注册表
 REWARD_FUNCS_REGISTRY = {
     "accuracy": accuracy_reward,      # 答案准确性奖励
     "format": format_reward,          # 格式规范性奖励
     "reasoning_steps": reasoning_steps_reward,  # 推理步骤完整性奖励
+    "length_reward": length_reward,      # 答案长度奖励
 }
