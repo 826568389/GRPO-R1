@@ -221,4 +221,19 @@ class GRPOTrainerExt(GRPOTrainer):
         mean_kl = ((per_token_kl * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
         self._metrics["kl"].append(self.accelerator.gather_for_metrics(mean_kl).mean().item())
 
+        # 计算 clip ratio
+        with torch.no_grad():
+            total_grad_norm = torch.nn.utils.clip_grad_norm_(
+                model.parameters(), 
+                self.args.max_grad_norm
+            )
+            clip_ratio = (total_grad_norm / self.args.max_grad_norm).item()
+            self._metrics["clip_ratio"].append(clip_ratio)  # 记录 clip ratio
+
         return loss
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._metrics = defaultdict(list)
+        # ... existing code ...
+        self._metrics["clip_ratio"] = []  # 初始化 clip ratio 记录列表

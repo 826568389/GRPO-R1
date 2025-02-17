@@ -30,7 +30,7 @@ logging_steps: 10               # 日志记录步数
 logging_strategy: steps         # 日志记录策略
 lr_scheduler_type: cosine       # 学习率调度器类型
 max_prompt_length: 256          # 最大提示长度
-num_generations: 16             # 每个样本生成数量
+num_generations: 8             # 每个样本生成数量
 max_completion_length: 1024     # 最大补全长度
 max_steps: -1                   # 最大训练步数
 num_train_epochs: 3             # 训练轮数
@@ -44,3 +44,11 @@ report_to:
 save_strategy: "epoch"          # 保存策略
 seed: 42                        # 随机种子
 warmup_ratio: 0.1               # 预热比例
+
+# 梯度裁剪配置
+max_grad_norm: 1.0              # 最大梯度范数，用于梯度裁剪
+clip_ratio_threshold: 1.0       # clip ratio 阈值，超过此值会被记录
+
+# 日志配置
+log_clip_ratio: true            # 是否记录 clip ratio
+clip_ratio_logging_steps: 10    # 每多少步记录一次 clip ratio
