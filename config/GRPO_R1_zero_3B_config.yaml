@@ -1,6 +1,3 @@
-# This is X-R1(https://github.com/dhcode-cpp/X-R1) project training config:
-# required >  4x3090(24G)/4090(24G)
-# running time 2~3h
 
 # Model arguments
 model_name_or_path: ./output/qwen2.5-3b
@@ -38,7 +35,7 @@ num_generations: 4
 max_completion_length: 1024
 max_steps: -1
 num_train_epochs: 3
-output_dir: output/X-R1-3B
+output_dir: output/GRPO-R1-3B
 overwrite_output_dir: true
 per_device_eval_batch_size: 1
 per_device_train_batch_size: 1

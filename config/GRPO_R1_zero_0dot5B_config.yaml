@@ -1,50 +1,46 @@
-# This is X-R1(https://github.com/dhcode-cpp/X-R1) project training config:
-# required >  4x3090(24G)/4090(24G)
-# running time ~1h
-
 # Model arguments
-model_name_or_path: /data/staryea/aigc_model/Qwen2.5-0.5B-Instruct
-model_revision: main
-torch_dtype: bfloat16
-attn_implementation: flash_attention_2
+model_name_or_path: /data/staryea/aigc_model/Qwen2.5-0.5B-Instruct  # 模型路径
+model_revision: main            # 模型版本
+torch_dtype: bfloat16          # 模型精度类型
+attn_implementation: flash_attention_2  # 注意力机制实现方式
 
 # Data training arguments
-dataset_name: /data/staryea/DeepSeek/dataset/xiaodongguaAIGC/X-R1-750
+dataset_name: /data/staryea/DeepSeek/dataset/xiaodongguaAIGC/X-R1-750  # 数据集路径
 dataset_configs:
-- train
-num_processes: 3
+- train                        # 训练集配置
+num_processes: 3               # 数据加载进程数
 
 # GRPO trainer config
-bf16: true
-use_vllm: true
-vllm_device: auto
-vllm_gpu_memory_utilization: 0.3
-do_eval: no
-eval_strategy: "no"
-eval_steps: 10
-gradient_accumulation_steps: 4
-gradient_checkpointing: true
+bf16: true                     # 是否使用bfloat16精度
+use_vllm: true                # 是否使用VLLM加速推理
+vllm_device: auto             # VLLM设备选择
+vllm_gpu_memory_utilization: 0.3  # VLLM GPU内存使用率
+do_eval: no                   # 是否进行评估
+eval_strategy: "no"           # 评估策略
+eval_steps: 10                # 评估步数
+gradient_accumulation_steps: 4 # 梯度累积步数
+gradient_checkpointing: true   # 是否使用梯度检查点
 gradient_checkpointing_kwargs:
-  use_reentrant: false
-hub_model_id: Qwen/Qwen2.5-0.5B
-hub_strategy: every_save
-learning_rate: 3.0e-06
-log_level: info
-logging_steps: 10
-logging_strategy: steps
-lr_scheduler_type: cosine
-max_prompt_length: 256
-num_generations: 16
-max_completion_length: 1024
-max_steps: -1
-num_train_epochs: 3
-output_dir: output/X-R1-0.5B
-overwrite_output_dir: true
-per_device_eval_batch_size: 1
-per_device_train_batch_size: 1
-push_to_hub: False
+  use_reentrant: false        # 是否使用重入式检查点
+hub_model_id: Qwen/Qwen2.5-0.5B  # Hub模型ID
+hub_strategy: every_save         # Hub保存策略
+learning_rate: 3.0e-06          # 学习率
+log_level: info                 # 日志级别
+logging_steps: 10               # 日志记录步数
+logging_strategy: steps         # 日志记录策略
+lr_scheduler_type: cosine       # 学习率调度器类型
+max_prompt_length: 256          # 最大提示长度
+num_generations: 16             # 每个样本生成数量
+max_completion_length: 1024     # 最大补全长度
+max_steps: -1                   # 最大训练步数
+num_train_epochs: 3             # 训练轮数
+output_dir: output/GRPO-R1-0.5B  # 输出目录
+overwrite_output_dir: true       # 是否覆盖输出目录
+per_device_eval_batch_size: 1    # 每个设备评估批次大小
+per_device_train_batch_size: 1   # 每个设备训练批次大小
+push_to_hub: False              # 是否推送到Hub
 report_to:
-- wandb
-save_strategy: "epoch"
-seed: 42
-warmup_ratio: 0.1
+- wandb                         # 训练报告工具
+save_strategy: "epoch"          # 保存策略
+seed: 42                        # 随机种子
+warmup_ratio: 0.1               # 预热比例
