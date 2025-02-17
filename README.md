@@ -72,7 +72,7 @@ bash bin/run_grpo_r1_qwen3b.sh
 - accelerate >= 1.2.1
 - torch == 2.5.1
 - transformers
-- deepspeed == 0.10.0
+- deepspeed == 0.15.4
 - vllm == 0.7.1
 - trl == 0.14.0
 - wandb >= 0.19.1
