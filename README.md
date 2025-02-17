@@ -1,36 +1,70 @@
 # GRPO-R1
 
-GRPO-R1是一个基于深度学习的项目，专注于大规模语言模型的训练和优化。该项目使用了最新的AI技术和工具，包括Hugging Face的transformers库和各种优化框架。
+GRPO-R1 是一个基于 GRPO (Generative Reward-Penalty Optimization) 算法的大语言模型训练框架。该项目专注于通过奖惩机制来优化模型的生成质量，支持多种规模的语言模型训练。
 
-## 项目特点
+## 特性
 
-- 基于PyTorch框架
-- 支持分布式训练（使用DeepSpeed）
-- 集成了多个先进的AI训练和优化工具
-- 支持高效的模型推理（使用VLLM）
+- 🚀 支持多种规模的模型训练 (0.5B, 1.5B, 3B, 7B)
+- 💫 基于 DeepSpeed ZeRO-3 的高效分布式训练
+- 🔄 支持 VLLM 加速推理
+- 📊 集成 Wandb 可视化训练过程
+- 🛠 完整的训练评估流程
 
-## 系统要求
+## 环境要求
 
 - Python >= 3.10.9
-- CUDA 兼容的GPU（推荐）
-- 足够的RAM和GPU内存
+- CUDA >= 11.8
+- 显存要求:
+  - 0.5B 模型: 至少 3 x 24GB GPU
+  - 1.5B 模型: 至少 3 x 24GB GPU
+  - 3B 模型: 至少 4 x 24GB GPU
+  - 7B 模型: 至少 8 x 80GB GPU
 
-## 安装说明
+## 快速开始
 
-1. 克隆仓库：
+1. 克隆仓库:
 ```bash
 git clone https://github.com/826568389/GRPO-R1
 cd GRPO-R1
 ```
 
-2. 安装依赖：
+2. 创建并激活环境:
 ```bash
-pip install -r requirements.txt
+conda create -n grpo python=3.11
+conda activate grpo
 ```
 
-3. 开发模式安装：
+3. 安装依赖:
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements.txt
+pip install -e ".[dev]"  # 开发模式安装
+```
+
+4. 运行训练:
+```bash
+# 训练 0.5B 模型
+bash bin/run_grpo_r1_qwen0.5b.sh
+
+# 训练 1.5B 模型
+bash bin/run_grpo_r1_qwen1.5b.sh
+
+# 训练 3B 模型
+bash bin/run_grpo_r1_qwen3b.sh
+```
+
+## 项目结构
+
+```
+.
+├── bin/            # 训练脚本
+├── config/         # 配置文件
+│   ├── GRPO1.yaml     # ZeRO-1 配置
+│   ├── GRPO2.yaml     # ZeRO-2 配置
+│   ├── GRPO3.yaml     # ZeRO-3 配置
+│   └── GRPO_R1_*.yaml # 模型训练配置
+├── src/           # 源代码
+│   └── grpo_r1/   # 核心实现
+└── output/        # 输出目录
 ```
 
 ## 主要依赖
@@ -38,41 +72,34 @@ pip install -e ".[dev]"
 - accelerate >= 1.2.1
 - torch == 2.5.1
 - transformers
-- deepspeed == 0.15.4
+- deepspeed == 0.10.0
 - vllm == 0.7.1
-- bitsandbytes >= 0.43.0
-- huggingface-hub[cli] >= 0.19.2
-- datasets >= 3.2.0
+- trl == 0.14.0
+- wandb >= 0.19.1
 
-## 项目结构
+## 训练配置说明
 
-```
-.
-├── config/         # 配置文件目录
-├── scripts/        # 实用脚本
-├── src/           # 源代码
-│   └── grpo_r1/   # 核心代码
-└── tests/         # 测试文件
-```
+- **ZeRO 配置**: 提供了三种 ZeRO 配置(1/2/3)，可根据硬件资源选择
+- **模型配置**: 针对不同规模模型提供了优化的配置文件
+- **分布式训练**: 支持多 GPU 训练，自动适配显存
 
 ## 许可证
 
 本项目采用 Apache License 2.0 许可证。详情请参见 LICENSE 文件。
 
-## 联系方式
+## 贡献者
 
-- 作者：826568389 2662007798 supertpx
-- 作者：826568389@qq.com 2662007798@qq.com
-- 项目地址：https://github.com/826568389/GRPO-R1
+- 826568389 (826568389@qq.com)
+- 2662007798 (2662007798@qq.com)
+- supertpx
 
-## 贡献指南
+## 问题反馈
 
-欢迎提交问题和合并请求。在提交之前，请确保：
+如果您在使用过程中遇到任何问题，欢迎通过以下方式反馈：
 
-1. 更新测试用例
-2. 更新文档
-3. 遵循项目的代码风格
-4. 所有测试都通过
+1. 在 GitHub Issues 中提交问题
+2. 发送邮件至维护者邮箱
+3. 提交 Pull Request
 
 ## 致谢
 
