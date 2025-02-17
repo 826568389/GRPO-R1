@@ -133,7 +133,7 @@ def main(script_args, training_args, model_args):
 
     print(model_args.model_name_or_path,)
     #############################
-    # Initialize the XGRPO trainer
+    # Initialize the GRPO-R1 trainer
     #############################
     trainer = GRPOTrainerExt(
         model = model,
@@ -170,7 +170,7 @@ def main(script_args, training_args, model_args):
     # Save everything else on main process
     kwargs = {
         "dataset_name": script_args.dataset_name,
-        "tags": ["X-R1"],
+        "tags": ["GRPO-R1"],
     }
     if trainer.accelerator.is_main_process:
         trainer.create_model_card(**kwargs)
