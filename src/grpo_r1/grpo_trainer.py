@@ -203,8 +203,18 @@ class GRPOTrainerExt(GRPOTrainer):
         loss = ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
 
         # Log the metrics
-        completion_length = self.accelerator.gather_for_metrics(completion_mask.sum(1)).float().mean().item()
-        self._metrics["completion_length"].append(completion_length)
+        completion_length = self.accelerator.gather_for_metrics(completion_mask.sum(1)).float()
+        mean_completion_length = completion_length.mean().item()
+        self._metrics["completion_length"].append(mean_completion_length)
+
+        # 计算超出最大长度的比例
+        max_length = self.args.max_completion_length
+        over_length_ratio = (completion_length >= max_length).float().mean().item()
+        self._metrics["over_length_ratio"].append(over_length_ratio)
+
+        # 记录最大和最小长度
+        self._metrics["max_completion_length"].append(completion_length.max().item())
+        self._metrics["min_completion_length"].append(completion_length.min().item())
 
         reward_per_func = self.accelerator.gather_for_metrics(rewards_per_func).mean(0)
         for i, reward_func in enumerate(self.reward_funcs):
@@ -237,3 +247,7 @@ class GRPOTrainerExt(GRPOTrainer):
         self._metrics = defaultdict(list)
         # ... existing code ...
         self._metrics["clip_ratio"] = []  # 初始化 clip ratio 记录列表
+        self._metrics["completion_length"] = []      # 平均长度
+        self._metrics["over_length_ratio"] = []      # 超长比例
+        self._metrics["max_completion_length"] = []  # 最大长度
+        self._metrics["min_completion_length"] = []  # 最小长度
