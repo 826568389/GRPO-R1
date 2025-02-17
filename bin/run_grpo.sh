@@ -43,12 +43,16 @@ fi
 # 添加项目根目录到PYTHONPATH
 export PYTHONPATH="${PROJECT_ROOT}:${PROJECT_ROOT}/src:${PYTHONPATH:-}"
 
+#GPU并行数0,1,2,3
+GPU_NUM=3
+
 # 运行训练
 echo "Starting training for ${MODEL_SIZE} model..."
+echo "tail -f ${OUTPUT_DIR}/grpo_r1_${CONFIG_NAME}_sampling.log 查看训练日志" 
 accelerate launch \
     --config_file "${PROJECT_ROOT}/config/GRPO3.yaml" \
-    --num_processes=3 "${PROJECT_ROOT}/src/grpo_r1/grpo.py" \
+    --num_processes="${GPU_NUM}" "${PROJECT_ROOT}/src/grpo_r1/grpo.py" \
     --config "${PROJECT_ROOT}/config/GRPO_R1_zero_${CONFIG_NAME}_config.yaml" \
-    > "${OUTPUT_DIR}/grpo_r1_${CONFIG_NAME}_sampling.log" 2>&1
+    > "${OUTPUT_DIR}/grpo_r1_${CONFIG_NAME}_sampling.log" 2>&1 
 
 echo "Training completed. Log file: ${OUTPUT_DIR}/grpo_r1_${CONFIG_NAME}_sampling.log" 
