@@ -21,10 +21,10 @@ vllm_gpu_memory_utilization: 0.3
 do_eval: false
 eval_strategy: "no"
 eval_steps: 10
-gradient_accumulation_steps: 8
+gradient_accumulation_steps: 4
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:
-  use_reentrant: true
+  use_reentrant: false
 hub_strategy: every_save
 learning_rate: 3.0e-06
 log_level: info
