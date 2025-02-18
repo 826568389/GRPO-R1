@@ -18,10 +18,10 @@ vllm_gpu_memory_utilization: 0.3  # VLLM GPU内存使用率
 do_eval: no                   # 是否进行评估
 eval_strategy: "no"           # 评估策略
 eval_steps: 10                # 评估步数
-gradient_accumulation_steps: 4 # 梯度累积步数
+gradient_accumulation_steps: 8 # 梯度累积步数
 gradient_checkpointing: true   # 是否使用梯度检查点
 gradient_checkpointing_kwargs:
-  use_reentrant: false        # 是否使用重入式检查点
+  use_reentrant: true        # 是否使用重入式检查点
 hub_model_id: Qwen/Qwen2.5-0.5B  # Hub模型ID
 hub_strategy: every_save         # Hub保存策略
 learning_rate: 3.0e-06          # 学习率
