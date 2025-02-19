@@ -1,41 +1,41 @@
 
 # Model arguments
-model_name_or_path: Qwen/Qwen2.5-7B
+model_name_or_path: /data/staryea/aigc_model/Qwen2.5-7B-Instruct
 model_revision: main
 torch_dtype: bfloat16
+attn_implementation: flash_attention_2
 
 # Data training arguments
-dataset_name: xiaodongguaAIGC/X-R1-7500 # 750 / 1500 / 7500
+dataset_name: /data/staryea/DeepSeek/dataset/xiaodongguaAIGC/X-R1-750 
 dataset_configs:
 - train
-num_processes: 7
+num_processes: 3
 
 # GRPO trainer config
-use_vllm: true
-output_dir: output/GRPO-R1-7B
-gradient_accumulation_steps: 4
-max_prompt_length: 256
-num_generations: 8
-max_completion_length: 1024
 
 bf16: true
+use_vllm: true
 vllm_device: auto
-vllm_gpu_memory_utilization: 0.7
+vllm_gpu_memory_utilization: 0.35
 do_eval: false
-eval_strategy: no
+eval_strategy: "no"
 eval_steps: 10
+gradient_accumulation_steps: 48
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:
   use_reentrant: false
-hub_model_id: Qwen/Qwen2.5-7B
 hub_strategy: every_save
-learning_rate: 3.0e-06
+learning_rate: 1.0e-06
 log_level: info
 logging_steps: 10
 logging_strategy: steps
 lr_scheduler_type: cosine
+max_prompt_length: 256
+num_generations: 4
+max_completion_length: 512
 max_steps: -1
 num_train_epochs: 3
+output_dir: output/GRPO-R1-7B-length-reward
 overwrite_output_dir: true
 per_device_eval_batch_size: 1
 per_device_train_batch_size: 1
@@ -44,4 +44,6 @@ report_to:
 - wandb
 save_strategy: "epoch"
 seed: 42
-warmup_ratio: 0.1
+warmup_ratio: 0.05
+max_grad_norm: 1.0                # 添加梯度裁剪
+optim: "adamw_torch_fused"        # 使用融合优化器

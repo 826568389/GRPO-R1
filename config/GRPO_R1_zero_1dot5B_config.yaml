@@ -36,7 +36,7 @@ num_generations: 8
 max_completion_length: 1024
 max_steps: -1
 num_train_epochs: 3
-output_dir: output/GRPO-R1-1.5B
+output_dir: output/GRPO-R1-1.5B-length-reward
 overwrite_output_dir: true
 per_device_eval_batch_size: 1
 per_device_train_batch_size: 1
@@ -45,4 +45,4 @@ report_to:
 - wandb
 save_strategy: "epoch"
 seed: 42
-warmup_ratio: 0.1
+warmup_ratio: 0.03
