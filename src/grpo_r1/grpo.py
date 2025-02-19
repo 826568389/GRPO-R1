@@ -5,6 +5,7 @@ GRPO-R1的主要训练脚本
 
 import logging
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import sys
 from dataclasses import dataclass, field
 
@@ -122,7 +123,7 @@ def main(script_args, training_args, model_args):
     model_kwargs = dict(
         revision=model_args.model_revision,
         trust_remote_code=model_args.trust_remote_code,
-        attn_implementation="eager",
+        attn_implementation=model_args.attn_implementation,
         torch_dtype=torch_dtype,
         use_cache=False if training_args.gradient_checkpointing else True,
     )
