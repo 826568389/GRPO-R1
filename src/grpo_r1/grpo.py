@@ -5,6 +5,7 @@ GRPO-R1的主要训练脚本
 
 import logging
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import sys
 from dataclasses import dataclass, field
 

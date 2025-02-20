@@ -14,7 +14,7 @@ machine_rank: 0                  # 机器排名，单机为0
 main_training_function: main     # 主训练函数名
 mixed_precision: bf16            # 混合精度训练设置
 num_machines: 1                  # 机器数量
-num_processes: 1                 # 进程数量（GPU数量）
+num_processes: 3                 # 进程数量（GPU数量）
 rdzv_backend: static            # 集合点后端类型
 same_network: true              # 是否在同一网络中
 tpu_env: []                     # TPU环境设置
