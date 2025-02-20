@@ -21,6 +21,12 @@ from transformers import (
     set_seed,
     AutoConfig,
 )
+from peft import (
+    LoraConfig,
+    get_peft_model,
+    prepare_model_for_kbit_training,
+    TaskType,
+)
 
 from configs import SFTArguments
 from trainer import SFTTrainer
@@ -62,7 +68,7 @@ def train():
         # 设置运行名称
         if not args.run_name:
             model_name = args.model_name_or_path.split('/')[-1]
-            args.run_name = f"sft-{model_name}-full-{args.learning_rate}"
+            args.run_name = f"sft-{model_name}-{args.training_mode}-{args.learning_rate}"
         
         # 加载tokenizer
         logger.info("正在加载tokenizer...")
@@ -90,6 +96,22 @@ def train():
             args.model_name_or_path,
             **model_config
         )
+        
+        # 如果使用 LoRA，添加 LoRA 配置
+        if args.training_mode == "lora":
+            logger.info("正在配置 LoRA...")
+            target_modules = args.lora_target_modules.split(",")
+            
+            lora_config = LoraConfig(
+                r=args.lora_r,
+                lora_alpha=args.lora_alpha,
+                target_modules=target_modules,
+                lora_dropout=args.lora_dropout,
+                bias="none",
+                task_type=TaskType.CAUSAL_LM,
+            )
+            model = get_peft_model(model, lora_config)
+            model.print_trainable_parameters()
         
         # 加载数据集
         logger.info("正在加载数据集...")
@@ -173,57 +195,63 @@ def train():
                 
                 if trainer.is_world_process_zero():
                     try:
-                        # 使用DeepSpeed的状态字典加载器
-                        logger.info("正在合并分片参数...")
-                        from deepspeed.utils.zero_to_fp32 import get_fp32_state_dict_from_zero_checkpoint
-                        state_dict = get_fp32_state_dict_from_zero_checkpoint(checkpoint_path)
-                        
-                        # 获取HF模型配置
-                        config = AutoConfig.from_pretrained(
-                            args.model_name_or_path,
-                            trust_remote_code=True
-                        )
-                        
-                        # 创建新的模型实例
-                        logger.info("创建新的模型实例...")
-                        # 获取正确的模型类
-                        if hasattr(trainer.model, "module"):
-                            model_class = type(trainer.model.module)
+                        if args.training_mode == "lora":
+                            # 对于 LoRA，直接保存 adapter 权重
+                            logger.info("保存 LoRA adapter 权重...")
+                            trainer.model.save_pretrained(save_path)
+                            trainer.tokenizer.save_pretrained(save_path)
                         else:
-                            model_class = type(trainer.model)
+                            # 使用DeepSpeed的状态字典加载器
+                            logger.info("正在合并分片参数...")
+                            from deepspeed.utils.zero_to_fp32 import get_fp32_state_dict_from_zero_checkpoint
+                            state_dict = get_fp32_state_dict_from_zero_checkpoint(checkpoint_path)
                             
-                        logger.info(f"使用模型类: {model_class.__name__}")
-                        new_model = model_class(config)
-                        
-                        # 加载状态字典
-                        logger.info("加载合并后的参数...")
-                        # 处理lm_head权重
-                        if "model.embed_tokens.weight" in state_dict:
-                            state_dict["lm_head.weight"] = state_dict["model.embed_tokens.weight"]
-                            logger.info("从embed_tokens复制权重到lm_head")
+                            # 获取HF模型配置
+                            config = AutoConfig.from_pretrained(
+                                args.model_name_or_path,
+                                trust_remote_code=True
+                            )
                             
-                        missing_keys, unexpected_keys = new_model.load_state_dict(state_dict, strict=False)
-                        if missing_keys:
-                            logger.warning(f"加载状态字典时缺少的键: {missing_keys}")
-                        if unexpected_keys:
-                            logger.warning(f"加载状态字典时未预期的键: {unexpected_keys}")
+                            # 创建新的模型实例
+                            logger.info("创建新的模型实例...")
+                            # 获取正确的模型类
+                            if hasattr(trainer.model, "module"):
+                                model_class = type(trainer.model.module)
+                            else:
+                                model_class = type(trainer.model)
+                                
+                            logger.info(f"使用模型类: {model_class.__name__}")
+                            new_model = model_class(config)
                             
-                        # 确保lm_head权重正确设置
-                        if hasattr(new_model, "lm_head") and hasattr(new_model, "model"):
-                            if hasattr(new_model.model, "embed_tokens"):
-                                logger.info("设置lm_head权重与embed_tokens共享")
-                                new_model.lm_head.weight = new_model.model.embed_tokens.weight
-                        
-                        # 保存完整模型
-                        logger.info("保存完整模型...")
-                        new_model.save_pretrained(
-                            save_path,
-                            safe_serialization=True,
-                            max_shard_size="10GB"
-                        )
-                        
-                        # 保存tokenizer和配置
-                        trainer.tokenizer.save_pretrained(save_path)
+                            # 加载状态字典
+                            logger.info("加载合并后的参数...")
+                            # 处理lm_head权重
+                            if "model.embed_tokens.weight" in state_dict:
+                                state_dict["lm_head.weight"] = state_dict["model.embed_tokens.weight"]
+                                logger.info("从embed_tokens复制权重到lm_head")
+                                
+                            missing_keys, unexpected_keys = new_model.load_state_dict(state_dict, strict=False)
+                            if missing_keys:
+                                logger.warning(f"加载状态字典时缺少的键: {missing_keys}")
+                            if unexpected_keys:
+                                logger.warning(f"加载状态字典时未预期的键: {unexpected_keys}")
+                                
+                            # 确保lm_head权重正确设置
+                            if hasattr(new_model, "lm_head") and hasattr(new_model, "model"):
+                                if hasattr(new_model.model, "embed_tokens"):
+                                    logger.info("设置lm_head权重与embed_tokens共享")
+                                    new_model.lm_head.weight = new_model.model.embed_tokens.weight
+                            
+                            # 保存完整模型
+                            logger.info("保存完整模型...")
+                            new_model.save_pretrained(
+                                save_path,
+                                safe_serialization=True,
+                                max_shard_size="10GB"
+                            )
+                            
+                            # 保存tokenizer和配置
+                            trainer.tokenizer.save_pretrained(save_path)
                         
                         # 清理临时checkpoint
                         logger.info("清理临时文件...")
@@ -242,7 +270,7 @@ def train():
                             logger.info(f"  - {file} ({file_size/1024/1024:.2f}MB)")
                         logger.info(f"总文件大小: {total_size/1024/1024:.2f}MB")
                         
-                        if total_size < 100 * 1024 * 1024:
+                        if total_size < 100 * 1024 * 1024 and args.training_mode != "lora":
                             raise Exception("保存的模型文件过小，可能未正确保存")
                             
                     except Exception as e:
@@ -259,8 +287,13 @@ def train():
         else:
             # 普通模式保存
             try:
-                logger.info("使用标准模式保存模型...")
-                trainer.save_model(save_path)
+                if args.training_mode == "lora":
+                    logger.info("保存 LoRA adapter 权重...")
+                    trainer.model.save_pretrained(save_path)
+                    trainer.tokenizer.save_pretrained(save_path)
+                else:
+                    logger.info("使用标准模式保存模型...")
+                    trainer.save_model(save_path)
                 logger.info("模型保存成功")
                 
                 if trainer.is_world_process_zero():
@@ -276,7 +309,7 @@ def train():
                         logger.info(f"  - {file} ({file_size/1024/1024:.2f}MB)")
                     logger.info(f"总文件大小: {total_size/1024/1024:.2f}MB")
                     
-                    if total_size < 100 * 1024 * 1024:
+                    if total_size < 100 * 1024 * 1024 and args.training_mode != "lora":
                         raise Exception("保存的模型文件过小，可能未正确保存")
                         
             except Exception as e:

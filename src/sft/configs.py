@@ -4,7 +4,7 @@ SFT的配置模块
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Optional, List, Union
 
 from transformers import TrainingArguments
 
@@ -35,27 +35,6 @@ class DeepSpeedConfig:
     fp16: bool = field(
         default=False,
         metadata={"help": "是否使用FP16训练"}
-    )
-
-
-@dataclass
-class LoRAConfig:
-    """LoRA配置类"""
-    r: int = field(
-        default=8,
-        metadata={"help": "LoRA秩"}
-    )
-    alpha: int = field(
-        default=16,
-        metadata={"help": "LoRA alpha参数"}
-    )
-    dropout: float = field(
-        default=0.05,
-        metadata={"help": "LoRA dropout概率"}
-    )
-    target_modules: List[str] = field(
-        default_factory=lambda: ["q_proj", "k_proj", "v_proj", "o_proj"],
-        metadata={"help": "要应用LoRA的模块名称列表"}
     )
 
 
@@ -118,9 +97,22 @@ class SFTArguments(TrainingArguments):
         default="full",
         metadata={"help": "训练模式: 'full' (全参数微调), 'lora' (LoRA), 'qlora' (QLoRA)"}
     )
-    lora_config: LoRAConfig = field(
-        default_factory=LoRAConfig,
-        metadata={"help": "LoRA配置"}
+    # LoRA 参数
+    lora_r: int = field(
+        default=8,
+        metadata={"help": "LoRA秩"}
+    )
+    lora_alpha: int = field(
+        default=16,
+        metadata={"help": "LoRA alpha参数"}
+    )
+    lora_dropout: float = field(
+        default=0.05,
+        metadata={"help": "LoRA dropout概率"}
+    )
+    lora_target_modules: str = field(
+        default="q_proj,k_proj,v_proj,o_proj",
+        metadata={"help": "要应用LoRA的模块名称，用逗号分隔"}
     )
     quantization_bits: Optional[int] = field(
         default=None,
@@ -129,4 +121,9 @@ class SFTArguments(TrainingArguments):
     use_gradient_checkpointing: bool = field(
         default=True,
         metadata={"help": "是否使用梯度检查点以节省显存"}
-    ) 
+    )
+    
+    @property
+    def lora_target_modules_list(self) -> List[str]:
+        """将逗号分隔的字符串转换为列表"""
+        return [m.strip() for m in self.lora_target_modules.split(",") if m.strip()] 

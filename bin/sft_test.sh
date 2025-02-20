@@ -12,7 +12,14 @@ export TORCH_SHOW_WARNING=0
 export TOKENIZERS_PARALLELISM=false
 export PYTHONWARNINGS="ignore"
 
+MODEL_PATH="output/Qwen2.5-0.5B-Instruct-sft-lora/final_model"
+
 # 执行测试命令
 python ${PROJECT_ROOT}/src/sft/test.py \
-    --model_path "output/Qwen2.5-0.5B-Instruct-sft-full/final_model" \
-    --fp16 
+    --model_path ${MODEL_PATH} \
+    --fp16 \
+    --temperature 0.7 \
+    --top_p 0.9 \
+    --max_new_tokens 512 \
+    --repetition_penalty 1.1 \
+    --system_prompt "你是一个有用的AI助手。请简洁、准确地回答问题。避免重复和冗长的回答。" 
