@@ -8,6 +8,7 @@ import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import datasets
 import torch
@@ -40,15 +41,38 @@ class GRPOScriptArguments(ScriptArguments):
             "help": f"奖励函数列表，可选值: {', '.join(REWARD_FUNCS_REGISTRY.keys())}"
         },
     )
+    prompt_file: str = field(
+        default="config/prompt.txt",
+        metadata={
+            "help": "系统提示词配置文件路径，可以是绝对路径或相对于项目根目录的路径"
+        },
+    )
 
 
-# 系统提示词，用于构建对话格式
-SYSTEM_PROMPT = (
-    "A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant "
-    "first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning "
-    "process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., "
-    "<think> reasoning process here </think><answer> answer here </answer>"
-)
+def load_system_prompt(prompt_file: str) -> str:
+    """
+    从配置文件加载系统提示词
+    
+    参数:
+        prompt_file: 提示词配置文件路径
+    返回:
+        系统提示词字符串
+    """
+    try:
+        # 获取项目根目录
+        project_root = Path(__file__).parent.parent.parent
+        prompt_path = project_root / prompt_file
+        
+        if not prompt_path.exists():
+            logger.error(f"提示词配置文件不存在: {prompt_path}")
+            return ""
+            
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            return f.read().strip()
+            
+    except Exception as e:
+        logger.error(f"读取提示词配置文件失败: {str(e)}")
+        return ""
 
 
 def main(script_args, training_args, model_args):
@@ -98,12 +122,18 @@ def main(script_args, training_args, model_args):
     # 获取奖励函数
     reward_funcs = [REWARD_FUNCS_REGISTRY[func] for func in script_args.reward_funcs]
 
+    # 加载系统提示词
+    system_prompt = load_system_prompt(script_args.prompt_file)
+    if not system_prompt:
+        logger.error("加载系统提示词失败")
+        sys.exit(1)
+
     # 将数据格式化为对话格式
     def make_conversation(example):
         """将示例转换为对话格式"""
         return {
             "prompt": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": example["problem"]},
             ],
         }
