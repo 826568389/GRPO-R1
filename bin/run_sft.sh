@@ -32,7 +32,4 @@ deepspeed --num_gpus 4 ${PROJECT_ROOT}/src/sft/train.py \
     --use_gradient_checkpointing true \
     --fp16 true \
     --deepspeed "${PROJECT_ROOT}/config/sft_zero3.json" \
-    --report_to "wandb" \
-    --full_finetune true \
-    --lora_rank 0 \
-    --use_peft false 
+    --report_to "wandb" 
