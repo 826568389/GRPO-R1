@@ -190,5 +190,5 @@ REWARD_FUNCS_REGISTRY = {
     "accuracy": accuracy_reward,      # 答案准确性奖励
     "format": format_reward,          # 格式规范性奖励
     "reasoning_steps": reasoning_steps_reward,  # 推理步骤完整性奖励
-    "length_reward": length_reward,      # 答案长度奖励
+    #"length_reward": length_reward,      # 答案长度奖励
 }
