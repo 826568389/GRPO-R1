@@ -38,6 +38,42 @@ GRPO-R1 是一个综合性的大语言模型训练框架，支持两种主要训
   - 最大生成长度限制
 - 💬 支持自定义系统提示语
 
+### 数据处理功能
+
+新增数据处理脚本 `src/sft/process_csv.py`，支持以下特性：
+- 🔄 支持多种数据格式转换：
+  - Excel文件（.xls, .xlsx）
+  - CSV文件（多种编码支持）
+  - 自动检测文件类型和编码
+- 📊 智能数据处理：
+  - 自动添加缺失的instruction列
+  - 数据清理和验证
+  - 详细的处理日志
+- 💫 输出JSONL格式，支持以下字段：
+  - input: 输入文本
+  - output: 期望输出
+  - instruction: 指令说明
+
+使用示例：
+```bash
+# 处理Excel/CSV文件
+python src/sft/process_csv.py \
+    --input data/input.xlsx \
+    --output data/output.jsonl
+```
+
+### 训练数据要求
+
+训练数据需要包含以下字段：
+- `input`: 输入问题或场景描述
+- `output`: 期望的模型输出
+- `instruction`: 指导模型如何回答的指令（可选，脚本会自动添加默认值）
+
+支持的数据格式：
+1. JSONL格式：每行一个JSON对象
+2. Excel格式（.xls/.xlsx）
+3. CSV格式（支持多种编码）
+
 ### 使用示例
 
 1. 全参数微调训练：
@@ -212,10 +248,11 @@ https://huggingface.co/datasets/xiaodongguaAIGC/X-R1-750
 │       ├── configs.py     # SFT 配置类定义
 │       ├── train.py       # SFT 训练入口
 │       ├── trainer.py     # SFT 训练器实现
-│       └── test.py        # SFT 测试脚本
+│       ├── test.py        # SFT 测试脚本
+│       └── process_csv.py # 数据处理脚本
 └── output/                # 模型输出目录
-    ├── Qwen2.5-0.5B-Instruct-sft-full/    # 全参数微调输出
-    └── Qwen2.5-0.5B-Instruct-sft-lora/    # LoRA 训练输出
+    ├── Qwen2.5-7B-Instruct-sft-full/    # 全参数微调输出
+    └── Qwen2.5-7B-Instruct-sft-lora/    # LoRA 训练输出
 ```
 
 主要目录说明：
@@ -235,6 +272,9 @@ https://huggingface.co/datasets/xiaodongguaAIGC/X-R1-750
 - vllm == 0.7.1
 - trl == 0.14.0
 - wandb >= 0.19.1
+- pandas >= 2.0.0
+- openpyxl >= 3.1.0  # Excel文件支持
+- chardet >= 5.0.0   # 编码检测支持
 
 ## 训练配置说明
 
