@@ -17,6 +17,7 @@ from transformers import (
     DataCollator,
 )
 from datasets import Dataset
+from peft import PeftModel
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,15 @@ class SFTTrainer(Trainer):
             callbacks = [cb for cb in callbacks if not str(cb.__class__).endswith("WandBCallback")]
             # 禁用wandb报告
             args.report_to = [r for r in args.report_to if r != "wandb"]
+        
+        # 确保数据集格式正确
+        if train_dataset is not None:
+            if not all(col in train_dataset.features for col in ["input_ids", "labels"]):
+                raise ValueError("训练数据集必须包含 'input_ids' 和 'labels' 列")
+        
+        if eval_dataset is not None:
+            if not all(col in eval_dataset.features for col in ["input_ids", "labels"]):
+                raise ValueError("验证数据集必须包含 'input_ids' 和 'labels' 列")
         
         super().__init__(
             model=model,
@@ -77,25 +87,31 @@ class SFTTrainer(Trainer):
             
             # 记录模型参数量
             try:
-                named_parameters = list(model.named_parameters())
-                total_params = sum(p.numel() for name, p in named_parameters)
-                trainable_params = sum(p.numel() for name, p in named_parameters if p.requires_grad)
+                if isinstance(model, PeftModel):
+                    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+                    all_params = sum(p.numel() for p in model.parameters())
+                    wandb.config.update({
+                        "trainable_params": trainable_params,
+                        "total_params": all_params,
+                        "trainable_ratio": trainable_params / all_params,
+                    })
                 
-                wandb.config.update({
-                    "total_params": total_params,
-                    "trainable_params": trainable_params,
-                    "trainable_ratio": trainable_params / total_params
-                })
-                logger.info(f"模型总参数量: {total_params:,}")
-                logger.info(f"可训练参数量: {trainable_params:,}")
-                logger.info(f"可训练参数比例: {trainable_params/total_params:.2%}")
             except Exception as e:
                 logger.warning(f"记录模型参数量时出错: {str(e)}")
     
     def __del__(self):
-        """确保在对象销毁时关闭wandb"""
-        if self.is_world_process_zero() and wandb.run is not None:
-            wandb.finish()
+        """
+        清理函数，确保正确关闭wandb
+        """
+        try:
+            import wandb
+            if hasattr(self, 'args') and self.args is not None and \
+               hasattr(self, 'is_world_process_zero') and \
+               self.is_world_process_zero() and \
+               wandb.run is not None:
+                wandb.finish()
+        except Exception:
+            pass  # 忽略清理过程中的任何错误
     
     def log_metrics(self, split, metrics, epoch=None):
         """记录训练指标到wandb"""
@@ -181,4 +197,15 @@ class SFTTrainer(Trainer):
             },
             "gradient_clipping": 1.0,
             "steps_per_print": self.args.logging_steps,
-        } 
+        }
+    
+    def get_train_dataloader(self):
+        """获取训练数据加载器，添加数据验证"""
+        dataloader = super().get_train_dataloader()
+        if self.is_world_process_zero():
+            # 检查第一个批次
+            batch = next(iter(dataloader))
+            logger.info(f"训练数据批次格式: {batch.keys()}")
+            logger.info(f"输入形状: {batch['input_ids'].shape}")
+            logger.info(f"标签形状: {batch['labels'].shape}")
+        return dataloader 
