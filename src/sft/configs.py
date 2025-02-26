@@ -111,8 +111,8 @@ class SFTArguments(TrainingArguments):
         metadata={"help": "LoRA dropout概率"}
     )
     lora_target_modules: str = field(
-        default="q_proj,k_proj,v_proj,o_proj",
-        metadata={"help": "要应用LoRA的模块名称，用逗号分隔"}
+        default="c_attn,c_proj",
+        metadata={"help": "要应用LoRA的模块名称，用逗号分隔。Qwen模型使用: c_attn,c_proj"}
     )
     quantization_bits: Optional[int] = field(
         default=None,

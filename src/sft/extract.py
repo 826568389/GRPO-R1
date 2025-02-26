@@ -1,7 +1,7 @@
 import json
 import os
 
-def extract_1k_samples(input_file, output_file, num_samples=200):
+def extract_1k_samples(input_file, output_file, num_samples=100):
     """
     从大的JSON文件中提取指定数量的样本并保存
     每行是一个独立的JSON对象
@@ -34,8 +34,8 @@ def extract_1k_samples(input_file, output_file, num_samples=200):
 
 if __name__ == "__main__":
     # 设置文件路径
-    input_file = "/data/staryea/DeepSeek/dataset/BelleGroup/train_0.5M_CN/Belle_open_source_0.5M.json"
-    output_file = "/data/staryea/DeepSeek/dataset/BelleGroup/train_0.2k_CN/Belle_open_source_0.2k.json"
+    input_file = "/data/staryea/DeepSeek/dataset/CVE_QA/CVE_QA.json"
+    output_file = "/data/staryea/DeepSeek/dataset/CVE_QA/CVE_QA_0.1k.json"
     
     # 创建输出目录（如果不存在）
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
