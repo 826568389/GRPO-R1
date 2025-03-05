@@ -13,7 +13,7 @@ from typing import Tuple
 from transformers.modeling_utils import PreTrainedModel
 from transformers.tokenization_utils import PreTrainedTokenizer
 from modelscope import AutoModelForCausalLM, AutoTokenizer
-from peft import PeftModel
+from peft import PeftModel, PeftConfig, get_peft_model, LoraConfig, TaskType
 import torch
 
 # 禁用警告
@@ -24,13 +24,13 @@ def load_model(
     model_path: str,
     base_model_path: str = None,
     device: str = "cuda",
-    fp16: bool = True,
-    merge_lora: bool = False,  # 新增参数，控制是否合并LoRA权重
+    fp16: bool = False,
+    bf16: bool = False,
+    merge_lora: bool = False,
 ) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
     """加载模型和分词器"""
     print(f"\n正在加载模型: {model_path}")
     
-    # 检查模型路径是否存在
     if not os.path.exists(model_path):
         raise ValueError(f"模型路径不存在: {model_path}")
     
@@ -41,22 +41,8 @@ def load_model(
     if is_lora_model:
         if not base_model_path:
             raise ValueError("使用LoRA模型时必须提供基础模型路径")
-            
-        print(f"检测到LoRA模型")
-        print(f"基础模型路径: {base_model_path}")
-        print(f"LoRA权重路径: {model_path}")
-        
-        # 检查权重文件
-        adapter_model_path = os.path.join(model_path, "adapter_model.safetensors")
-        if not os.path.exists(adapter_model_path):
-            adapter_model_path = os.path.join(model_path, "adapter_model.bin")
-        if not os.path.exists(adapter_model_path):
-            raise ValueError(f"未找到LoRA权重文件！检查路径: {model_path}")
-        else:
-            print(f"找到LoRA权重文件: {os.path.basename(adapter_model_path)}")
         
         # 加载分词器
-        print("正在加载分词器...")
         tokenizer = AutoTokenizer.from_pretrained(
             base_model_path,
             trust_remote_code=True,
@@ -65,84 +51,76 @@ def load_model(
         # 设置模型加载配置
         model_kwargs = {
             "trust_remote_code": True,
-            "torch_dtype": torch.float16 if fp16 else torch.float32,
             "device_map": "auto" if device == "cuda" else None,
+            "torch_dtype": torch.bfloat16 if bf16 else (torch.float16 if fp16 else torch.float32)
         }
         
         # 加载基础模型
-        print("正在加载基础模型...")
         model = AutoModelForCausalLM.from_pretrained(
             base_model_path,
             **model_kwargs
         )
         
-        # 加载LoRA权重
-        print("正在加载LoRA权重...")
-        from peft import PeftConfig
+        # 加载LoRA配置和权重
         config = PeftConfig.from_pretrained(model_path)
-        print("\nLoRA模型信息:")
-        print(f"基础模型: {config.base_model_name_or_path}")
-        print(f"任务类型: {config.task_type}")
-        print(f"LoRA秩 (r): {config.r}")
-        print(f"LoRA alpha: {config.lora_alpha}")
-        print(f"目标模块: {config.target_modules}")
         
-        # 确保模型配置与训练时一致
-        if not config.target_modules or len(config.target_modules) == 0:
-            print("警告: LoRA配置中未找到目标模块，使用默认配置")
-            config.target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "down_proj", "gate_proj"]
-            config.r = 8
-            config.lora_alpha = 16
+        try:
+            model = PeftModel.from_pretrained(
+                model,
+                model_path,
+                torch_dtype=model_kwargs["torch_dtype"],
+                is_trainable=False,
+            )
+        except:
+            # 创建新的LoRA配置
+            lora_config = LoraConfig(
+                r=config.r,
+                lora_alpha=config.lora_alpha,
+                target_modules=config.target_modules,
+                lora_dropout=0.05,
+                bias="none",
+                task_type=TaskType.CAUSAL_LM,
+            )
             
-        # 加载LoRA模型
-        model = PeftModel.from_pretrained(
-            model,
-            model_path,
-            torch_dtype=torch.float16 if fp16 else torch.float32,
-            is_trainable=False,  # 设置为推理模式
-        )
+            # 重新创建PeftModel
+            model = get_peft_model(model, lora_config)
+            
+            # 加载权重
+            adapter_model_path = os.path.join(model_path, "adapter_model.safetensors")
+            if not os.path.exists(adapter_model_path):
+                adapter_model_path = os.path.join(model_path, "adapter_model.bin")
+            
+            if adapter_model_path.endswith(".safetensors"):
+                from safetensors import safe_open
+                with safe_open(adapter_model_path, framework="pt") as f:
+                    weight_map = {key: f.get_tensor(key) for key in f.keys()}
+            else:
+                weight_map = torch.load(adapter_model_path, map_location="cpu")
+            
+            model.load_state_dict(weight_map, strict=False)
         
-        # 确保模型处于正确的模式
-        model.eval()
-        
-        # 根据参数决定是否合并LoRA权重
+        # 合并LoRA权重
         if merge_lora and hasattr(model, 'merge_and_unload'):
-            print("合并LoRA权重到基础模型...")
             try:
                 model = model.merge_and_unload()
-                print("LoRA权重合并成功")
+                print("LoRA权重已合并到基础模型")
             except Exception as e:
-                print(f"警告: LoRA权重合并失败 - {str(e)}")
-                print("继续使用未合并的模型")
-        else:
-            print("使用动态LoRA权重（未合并）")
-            
+                print(f"LoRA权重合并失败: {str(e)}")
     else:
-        # 加载分词器
-        print("正在加载分词器...")
+        # 加载普通模型
         tokenizer = AutoTokenizer.from_pretrained(
             model_path,
             trust_remote_code=True,
         )
         
-        # 设置模型加载配置
-        model_kwargs = {
-            "trust_remote_code": True,
-            "torch_dtype": torch.float16 if fp16 else torch.float32,
-            "device_map": "auto" if device == "cuda" else None,
-        }
-        
-        # 加载模型
-        print("正在加载模型权重...")
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            **model_kwargs
+            trust_remote_code=True,
+            device_map="auto" if device == "cuda" else None,
+            torch_dtype=torch.bfloat16 if bf16 else (torch.float16 if fp16 else torch.float32)
         )
     
-    # 将模型移动到设备并设置为评估模式
-    if device == "cuda" and not model_kwargs.get("device_map"):
-        print(f"正在将模型移动到{device}设备...")
-        model = model.to(device)
+    # 设置为评估模式
     model = model.eval()
     print("模型加载完成！\n")
     return model, tokenizer
@@ -158,31 +136,20 @@ def generate_response(
     system_prompt: str = "作为网络安全领域的专家，你专注于解决各类网络安全问题，能全面分析解决网络攻击、漏洞管理、数据保护、身份认证、云安全、事件响应、零信任架构、物联网安全、APT防护及法律合规等网络安全相关问题，并提供详细的处置或技术建议",
 ) -> str:
     """生成回复"""
-    # 构建system和user输入
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_input}
     ]
     
-    # 使用chat模板构建输入
     prompt = tokenizer.apply_chat_template(
         messages,
         tokenize=False,
         add_generation_prompt=True
     )
     
-    # 准备模型输入
-    model_inputs = tokenizer([prompt], return_tensors="pt")
-    
-    # 确保输入在正确的设备上
-    for k, v in model_inputs.items():
-        model_inputs[k] = v.to(model.device)
+    model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
     
     with torch.no_grad():
-        # 确保模型在评估模式
-        model.eval()
-        
-        # 生成回复
         generated_ids = model.generate(
             **model_inputs,
             max_new_tokens=max_new_tokens,
@@ -196,7 +163,6 @@ def generate_response(
             no_repeat_ngram_size=3,
         )
         
-        # 只保留新生成的token
         generated_ids = [
             output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
         ]
@@ -206,19 +172,18 @@ def generate_response(
     return response.strip()
 
 def main():
-    # 解析命令行参数
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True, help="模型路径，如果是LoRA则是adapter路径")
     parser.add_argument("--base_model_path", type=str, help="基础模型路径，当使用LoRA时必须提供")
     parser.add_argument("--device", type=str, default="cuda")
-    parser.add_argument("--fp16", action="store_true")
+    parser.add_argument("--fp16", action="store_true", help="使用FP16精度")
+    parser.add_argument("--bf16", action="store_true", help="使用BF16精度")
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--top_p", type=float, default=0.9)
     parser.add_argument("--max_new_tokens", type=int, default=512)
     parser.add_argument("--repetition_penalty", type=float, default=1.1)
     parser.add_argument("--merge_lora", action="store_true")
-    parser.add_argument("--system_prompt", type=str, default="你是一个专业的助手，请根据用户的问题提供准确、专业的回答。", 
-                      help="System prompt for the model")
+    parser.add_argument("--system_prompt", type=str, default="你是一个专业的助手，请根据用户的问题提供准确、专业的回答。")
     args = parser.parse_args()
 
     try:
@@ -235,6 +200,7 @@ def main():
             base_model_path=args.base_model_path if is_lora_model else None,
             device=args.device,
             fp16=args.fp16,
+            bf16=args.bf16,
             merge_lora=args.merge_lora
         )
         
@@ -243,15 +209,11 @@ def main():
         
         while True:
             try:
-                # 等待用户输入
                 user_input = input("\n用户输入: ")
-                
-                # 检查是否退出
                 if user_input.lower() == 'quit':
                     print("\n对话结束")
                     break
                     
-                # 只有当用户实际输入内容时才生成回答
                 if user_input.strip():
                     generate_response(
                         model,
@@ -261,10 +223,9 @@ def main():
                         top_p=args.top_p,
                         repetition_penalty=args.repetition_penalty,
                         max_new_tokens=args.max_new_tokens,
-                        system_prompt=args.system_prompt,  # 传递system提示
+                        system_prompt=args.system_prompt,
                     )
             except KeyboardInterrupt:
-                # Ctrl+C 处理
                 print("\n用户中断，如需退出请输入 'quit'")
                 continue
         

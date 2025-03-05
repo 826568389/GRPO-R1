@@ -4,26 +4,22 @@ SFT训练入口脚本
 """
 
 import os
-import sys
 import logging
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     HfArgumentParser,
     set_seed,
-    AutoConfig,
 )
 from peft import (
     LoraConfig,
     get_peft_model,
     TaskType,
-    PeftModel,
 )
 
 from configs import SFTArguments
 from trainer import SFTTrainer
 from processors import preprocess_chat_function, normalize_data
-from datasets import load_dataset
 import torch
 
 logger = logging.getLogger(__name__)
@@ -57,17 +53,15 @@ def train():
         model_config = {
             "use_cache": False,  # 禁用KV缓存以节省显存
             "trust_remote_code": True,
-            "_attn_implementation": "eager",
+            "torch_dtype": torch.bfloat16,
         }
-        
-        # 设置数据类型
-        model_config["torch_dtype"] = torch.bfloat16  # 使用 bf16
-        
+        #设置device_map
+        model_config["device_map"] = None if args.deepspeed else "auto"       
+
         # 加载基础模型
         logger.info("正在加载模型...")
         
-        # 设置device_map
-        model_config["device_map"] = None if args.deepspeed else "auto"
+
             
         model = AutoModelForCausalLM.from_pretrained(
             args.model_name_or_path,
@@ -129,59 +123,43 @@ def train():
             
             # 加载JSON数组格式的文件
             logger.info(f"从文件加载数据: {args.dataset_name}")
-            data = []
+            data_list = []
             with open(args.dataset_name, 'r', encoding='utf-8') as f:
-                for line_num, line in enumerate(f, 1):
-                    try:
-                        line = line.strip()
-                        if not line:  # 跳过空行
+                for line in f:
+                    if line.strip():
+                        try:
+                            item = json.loads(line)
+                            data_list.append(item)
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"JSON解析失败：{str(e)}")
                             continue
-                        item = json.loads(line)
-                        if isinstance(item, dict):
-                            data.append(item)
-                        else:
-                            logger.warning(f"第{line_num}行数据格式错误，期望字典类型，实际得到 {type(item)}")
-                    except json.JSONDecodeError as e:
-                        logger.warning(f"第{line_num}行JSON解析失败：{str(e)}")
-                    except Exception as e:
-                        logger.warning(f"第{line_num}行处理失败：{str(e)}")
-                        
-            if not data:
+            
+            if not data_list:
                 raise ValueError("没有成功加载任何数据")
-                
-            logger.info(f"成功加载 {len(data)} 条数据")
-                
-            # 标准化数据
-            normalized_data = normalize_data(data)
+            
+            # 使用processors.py中的normalize_data进行数据标准化
+            logger.info("正在标准化数据...")
+            normalized_data = normalize_data(data_list)
             logger.info(f"数据标准化完成，处理后数据量: {len(normalized_data)}")
-                
+            
             # 转换为Dataset格式
-            dataset = Dataset.from_list(normalized_data)
+            train_dataset = Dataset.from_list(normalized_data)
+            logger.info(f"训练集大小: {len(train_dataset)} 条")
             
-            # 打印原始数据集信息
-            logger.info(f"\n数据集信息:")
-            logger.info(f"训练集大小: {len(dataset)} 条")
-            logger.info("\n示例数据:")
-            for i in range(min(3, len(dataset))):
-                logger.info(f"\n示例 {i+1}:")
-                for key, value in dataset[i].items():
-                    logger.info(f"{key}: {value}")
-                logger.info("-" * 50)
-            
-            # 预处理数据集
-            logger.info("\n正在预处理数据集...")
-            conversations = dataset.map(
+            # 使用processors.py中的preprocess_chat_function处理对话格式
+            logger.info("正在处理对话格式...")
+            train_dataset = train_dataset.map(
                 preprocess_chat_function,
                 batched=True,
-                remove_columns=dataset.column_names,
-                desc="处理对话数据",
+                remove_columns=train_dataset.column_names,
+                desc="处理训练集对话数据",
             )
             
-            # 打印预处理后的数据
-            logger.info("\n预处理后的数据示例:")
-            for i in range(min(3, len(conversations))):
-                logger.info(f"\n对话 {i+1}:")
-                logger.info(conversations[i]["conversations"])
+            # 打印示例数据
+            logger.info("\n训练集示例数据:")
+            for i in range(min(3, len(train_dataset))):
+                logger.info(f"\n示例 {i+1}:")
+                logger.info(train_dataset[i]["conversations"])
                 logger.info("-" * 50)
             
             # 使用tokenizer处理文本
@@ -196,34 +174,29 @@ def train():
                 inputs["labels"] = inputs["input_ids"].clone()
                 inputs["labels"][inputs["input_ids"] == tokenizer.pad_token_id] = -100
                 return inputs
-                
-            train_dataset = conversations.map(
+            
+            logger.info("正在对训练集进行tokenize处理...")
+            train_dataset = train_dataset.map(
                 tokenize_function,
                 batched=True,
-                remove_columns=conversations.column_names,
-                desc="tokenizing",
+                remove_columns=train_dataset.column_names,
+                desc="tokenizing train dataset",
             )
             
+
         except Exception as e:
-            logger.error(f"数据加载出错: {str(e)}")
+            logger.error(f"数据加载和预处理出错: {str(e)}")
+            logger.debug("错误详情:", exc_info=True)
             raise
         
-        # 训练配置
-        logger.info("训练配置:")
-        logger.info(f"- 批次大小: {args.per_device_train_batch_size}")
-        logger.info(f"- 梯度累积步数: {args.gradient_accumulation_steps}")
-        logger.info(f"- 有效批次大小: {args.per_device_train_batch_size * args.gradient_accumulation_steps * args.world_size}")
-        logger.info(f"- 学习率: {args.learning_rate}")
-        logger.info(f"- 训练轮数: {args.num_train_epochs}")
-        logger.info(f"- 最大序列长度: {args.max_seq_length}")
-        
+
         # 创建训练器
         trainer = SFTTrainer(
             model=model,
             args=args,
             train_dataset=train_dataset,
-            tokenizer=tokenizer,  # SFTTrainer内部会处理tokenizer的弃用警告
-            data_collator=None,  # 让trainer自动创建数据整理器
+            tokenizer=tokenizer,
+            data_collator=None,
         )
         
         # 开始训练
@@ -244,6 +217,8 @@ def train():
                     # 验证检查点完整性
                     if os.path.exists(os.path.join(last_checkpoint, "trainer_state.json")):
                         logger.info(f"发现有效检查点: {last_checkpoint}")
+                        # 设置torch.load的安全选项
+                        torch.serialization.add_safe_globals({"os", "torch", "numpy"})
                     else:
                         logger.warning(f"检查点 {last_checkpoint} 不完整，将从头开始训练")
                         last_checkpoint = None

@@ -113,99 +113,36 @@ class SFTTrainer(Trainer):
         except Exception:
             pass  # 忽略清理过程中的任何错误
     
-    def log_metrics(self, split, metrics, epoch=None):
-        """记录训练指标到wandb"""
-        if self.is_world_process_zero() and wandb.run is not None:
-            # 添加前缀
-            metrics = {f"{split}/{k}" if not k.startswith(split) else k: v 
-                      for k, v in metrics.items()}
-            # 记录到wandb
-            wandb.log(metrics, step=self.state.global_step)
-    
-    def training_step(self, model, inputs, num_items_in_batch=None):
-        """执行训练步骤并记录指标"""
-        # 执行训练
-        loss = super().training_step(model, inputs, num_items_in_batch)
-        
-        # 记录训练指标
-        if self.is_world_process_zero() and self.state.global_step % self.args.logging_steps == 0:
-            try:
-                # 计算训练进度
-                progress = (self.state.global_step / self.args.max_steps * 100) if self.args.max_steps > 0 else (self.state.epoch * 100)
-                
-                # 记录基本指标
-                metrics = {
-                    "train/loss": loss.item(),
-                    "train/learning_rate": self.optimizer.param_groups[0]["lr"],
-                    "train/epoch": self.state.epoch,
-                    "train/step": self.state.global_step,
-                    "train/progress": progress,
-                }
-                
-                # 记录perplexity
-                if not torch.isnan(loss) and not torch.isinf(loss):
-                    metrics["train/perplexity"] = torch.exp(loss).item()
-                
-                self.log_metrics("train", metrics)
-                
-            except Exception as e:
-                logger.warning(f"记录训练指标时出错: {str(e)}")
-        
-        return loss
-    
-    def _prepare_deepspeed(self):
-        """准备DeepSpeed配置"""
-        return {
-            "train_micro_batch_size_per_gpu": self.args.per_device_train_batch_size,
-            "gradient_accumulation_steps": self.args.gradient_accumulation_steps,
-            "optimizer": {
-                "type": "AdamW",
-                "params": {
-                    "lr": self.args.learning_rate,
-                    "betas": [0.9, 0.999],
-                    "eps": 1e-8,
-                    "weight_decay": 0.0,
-                }
-            },
-            "scheduler": {
-                "type": "WarmupDecayLR",
-                "params": {
-                    "warmup_min_lr": 0,
-                    "warmup_max_lr": self.args.learning_rate,
-                    "warmup_num_steps": self.args.warmup_steps,
-                    "total_num_steps": self.args.max_steps,
-                }
-            },
-            "fp16": {
-                "enabled": True,
-                "auto_cast": True,
-                "loss_scale": 0,
-                "initial_scale_power": 16,
-                "loss_scale_window": 1000,
-                "hysteresis": 2,
-                "min_loss_scale": 1
-            },
-            "zero_optimization": {
-                "stage": 3,
-                "offload_optimizer": {"device": "cpu"},
-                "offload_param": {"device": "cpu"},
-                "overlap_comm": True,
-                "contiguous_gradients": True,
-                "reduce_bucket_size": 5e7,
-                "stage3_prefetch_bucket_size": 5e7,
-                "stage3_param_persistence_threshold": 1e5,
-            },
-            "gradient_clipping": 1.0,
-            "steps_per_print": self.args.logging_steps,
-        }
-    
-    def get_train_dataloader(self):
+
+
         """获取训练数据加载器，添加数据验证"""
-        dataloader = super().get_train_dataloader()
-        if self.is_world_process_zero():
-            # 检查第一个批次
-            batch = next(iter(dataloader))
-            logger.info(f"训练数据批次格式: {batch.keys()}")
-            logger.info(f"输入形状: {batch['input_ids'].shape}")
-            logger.info(f"标签形状: {batch['labels'].shape}")
-        return dataloader 
+        try:
+            dataloader = super().get_train_dataloader()
+            
+            if self.is_world_process_zero():
+                # 检查第一个批次
+                batch = next(iter(dataloader))
+                logger.info("训练数据批次信息:")
+                logger.info(f"- 批次键: {batch.keys()}")
+                for key, value in batch.items():
+                    if hasattr(value, 'shape'):
+                        logger.info(f"- {key} 形状: {value.shape}")
+                        if torch.is_tensor(value):
+                            logger.info(f"  - 数据类型: {value.dtype}")
+                            logger.info(f"  - 设备: {value.device}")
+                            if value.numel() > 0:
+                                logger.info(f"  - 值范围: [{value.min()}, {value.max()}]")
+                
+                # 验证批次大小
+                if hasattr(self.args, 'per_device_train_batch_size'):
+                    expected_batch_size = self.args.per_device_train_batch_size
+                    actual_batch_size = batch['input_ids'].size(0)
+                    if actual_batch_size != expected_batch_size:
+                        logger.warning(f"实际批次大小 ({actual_batch_size}) 与配置的批次大小 ({expected_batch_size}) 不匹配")
+                
+            return dataloader
+            
+        except Exception as e:
+            logger.error(f"获取训练数据加载器失败: {str(e)}")
+            logger.debug("错误详情:", exc_info=True)
+            raise 

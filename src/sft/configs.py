@@ -97,6 +97,15 @@ class SFTArguments(TrainingArguments):
         default="full",
         metadata={"help": "训练模式: 'full' (全参数微调), 'lora' (LoRA), 'qlora' (QLoRA)"}
     )
+    preprocessing_batch_size: int = field(
+        default=16,
+        metadata={"help": "数据预处理时的批处理大小"}
+    )
+    # 特殊标记参数
+    special_tokens: str = field(
+        default="",
+        metadata={"help": "要添加到词表的特殊标记，用逗号分隔"}
+    )
     # LoRA 参数
     lora_r: int = field(
         default=8,
@@ -122,8 +131,39 @@ class SFTArguments(TrainingArguments):
         default=True,
         metadata={"help": "是否使用梯度检查点以节省显存"}
     )
+    # 生成相关参数
+    predict_with_generate: bool = field(
+        default=False,
+        metadata={"help": "是否使用生成模式进行预测"}
+    )
+    generation_max_length: int = field(
+        default=128,
+        metadata={"help": "生成时的最大长度"}
+    )
+    generation_num_beams: int = field(
+        default=4,
+        metadata={"help": "生成时使用的beam search数量"}
+    )
+    # 添加安全序列化相关参数
+    safe_serialization: bool = field(
+        default=True,
+        metadata={"help": "是否使用安全的序列化方式保存模型"}
+    )
+    weights_only: bool = field(
+        default=True,
+        metadata={"help": "加载检查点时是否只加载权重"}
+    )
+    torch_compile: bool = field(
+        default=False,
+        metadata={"help": "是否使用torch.compile加速"}
+    )
     
     @property
     def lora_target_modules_list(self) -> List[str]:
         """将逗号分隔的字符串转换为列表"""
-        return [m.strip() for m in self.lora_target_modules.split(",") if m.strip()] 
+        return [m.strip() for m in self.lora_target_modules.split(",") if m.strip()]
+        
+    @property
+    def special_tokens_list(self) -> List[str]:
+        """将逗号分隔的特殊标记字符串转换为列表"""
+        return [token.strip() for token in self.special_tokens.split(",") if token.strip()] 
