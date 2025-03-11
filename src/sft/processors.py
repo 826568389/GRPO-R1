@@ -127,108 +127,43 @@ def normalize_data(data_list):
 
 def preprocess_chat_function(examples):
     """
-    处理对话格式数据的预处理函数
-    
-    参数格式示例：
-    {
-        "instruction": ["指令1", "指令2", ...],
-        "input": ["输入1", "输入2", ...],
-        "output": ["输出1", "输出2", ...]
-    }
-    
-    返回格式：
-    {
-        "conversations": ["对话1", "对话2", ...]
-    }
+    处理对话数据，将其转换为模型可接受的格式
     """
-    conversations = []
+    # 初始化结果列表
+    conversations_list = []
     
-    try:
-        # 检查数据格式
-        if not all(field in examples for field in ["instruction", "input", "output"]):
-            raise ValueError("数据格式不正确，需要包含 instruction/input/output 字段")
-            
-        # 获取数据长度
-        batch_size = len(examples["input"])
+    # 检查必要的字段
+    required_fields = ["input", "output"]
+    for field in required_fields:
+        if field not in examples:
+            raise ValueError(f"数据集缺少必要的字段: {field}")
+    
+    # 处理每个样本
+    for i in range(len(examples["input"])):
+        # 获取输入和输出
+        user_input = examples["input"][i]
+        assistant_output = examples["output"][i]
         
-        # 处理每个样本
-        for i in range(batch_size):
-            try:
-                # 确保所有字段都是字符串
-                instruction = ensure_string(examples["instruction"][i])
-                input_text = ensure_string(examples["input"][i])
-                output = ensure_string(examples["output"][i])
-                
-                # 验证字段非空和长度
-                if not all([instruction, input_text, output]):
-                    print(f"警告：第{i+1}条数据包含空字段，跳过")
-                    continue
-                    
-                if any(len(text.strip()) < 2 for text in [instruction, input_text, output]):
-                    print(f"警告：第{i+1}条数据字段长度过短，跳过")
-                    continue
-                
-                # 构建对话格式
-                conversation = (
-                    f"<|im_start|>system\n{instruction}<|im_end|>\n"
-                    f"<|im_start|>user\n{input_text}<|im_end|>\n"
-                    f"<|im_start|>assistant\n{output}<|im_end|>"
-                ).strip()
-                
-                conversations.append(conversation)
-                
-            except Exception as e:
-                print(f"警告：处理第{i+1}条数据时出错：{str(e)}")
-                continue
+        # 确保输入和输出都是字符串
+        if not isinstance(user_input, str):
+            user_input = str(user_input)
+        if not isinstance(assistant_output, str):
+            assistant_output = str(assistant_output)
         
-        if not conversations:
-            print("警告：没有成功处理任何数据")
-            
-        return {"conversations": conversations}
+        # 构建对话文本，确保格式正确
+        conversation = f"<|user|>\n{user_input.strip()}\n<|assistant|>\n{assistant_output.strip()}"
+        conversations_list.append(conversation)
         
-    except Exception as e:
-        print(f"错误：预处理函数执行失败 - {str(e)}")
-        return {"conversations": []}
-
-def split_dataset(dataset: Dataset, val_ratio: float = 0.1, seed: int = 42) -> DatasetDict:
-    """
-    将数据集分割为训练集和验证集
+        # 打印前几个样本，帮助调试
+        if i < 2:
+            print(f"样本 {i+1}:")
+            print(f"用户输入: {user_input[:50]}...")
+            print(f"助手输出: {assistant_output[:50]}...")
+            print(f"构建的对话: {conversation[:100]}...")
+            print("-" * 50)
     
-    参数:
-        dataset: 原始数据集
-        val_ratio: 验证集比例
-        seed: 随机种子
-    
-    返回:
-        包含训练集和验证集的DatasetDict
-    """
-    # 设置随机种子
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    
-    # 计算数据集大小
-    dataset_size = len(dataset)
-    val_size = int(dataset_size * val_ratio)
-    
-    # 随机打乱索引
-    indices = np.random.permutation(dataset_size)
-    
-    # 分割数据集
-    val_indices = indices[:val_size]
-    train_indices = indices[val_size:]
-    
-    # 创建训练集和验证集
-    train_dataset = dataset.select(train_indices)
-    val_dataset = dataset.select(val_indices)
-    
-    logger.info(f"数据集大小: {dataset_size}")
-    logger.info(f"训练集大小: {len(train_dataset)}")
-    logger.info(f"验证集大小: {len(val_dataset)}")
-    
-    return DatasetDict({
-        'train': train_dataset,
-        'validation': val_dataset
-    })
+    # 返回处理后的数据
+    return {"conversations": conversations_list}
 
 def load_and_preprocess_data(args):
     """加载和预处理数据，返回原始数据集"""

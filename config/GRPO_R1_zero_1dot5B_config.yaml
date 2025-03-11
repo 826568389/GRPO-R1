@@ -26,7 +26,7 @@ gradient_checkpointing: true
 gradient_checkpointing_kwargs:
   use_reentrant: false
 hub_strategy: every_save
-learning_rate: 3.0e-06
+learning_rate: 1.0e-06
 log_level: info
 logging_steps: 10
 logging_strategy: steps
@@ -39,7 +39,7 @@ num_train_epochs: 3
 output_dir: output/GRPO-R1-1.5B-length-reward
 overwrite_output_dir: true
 per_device_eval_batch_size: 1
-per_device_train_batch_size: 1
+per_device_train_batch_size: 2
 push_to_hub: False
 report_to:
 - wandb

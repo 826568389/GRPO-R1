@@ -1,0 +1,10 @@
+# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+# 忽略所有output目录
+output/
+**/output
+wandb/
+**/wandb
+**/normalized_data
+normalized_data/
+evaluation_results/
+**/evaluation_results

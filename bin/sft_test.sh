@@ -17,11 +17,11 @@ MODEL_TYPE="lora"  # 可选: "lora" 或 "base"
 MERGE_LORA=true   # 是否合并LoRA权重到基础模型
 
 # 基础模型路径
-BASE_MODEL_PATH="/data/staryea/aigc_model/Qwen2.5-3B-Instruct"
+BASE_MODEL_PATH="/data/staryea/aigc_model/Qwen2.5-7B-Instruct"
 
 if [ "$MODEL_TYPE" = "lora" ]; then
     # LoRA模型配置
-    MODEL_PATH="/data/staryea/GRPO-R1/bin/output/Qwen2.5-3B-Instruct-Business-lora-030418/final_model"
+    MODEL_PATH="/data/staryea/GRPO-R1/bin/output/Qwen2.5-7B-Instruct-Business-lora-030615/checkpoint-100"
     # 执行测试命令 (带基础模型路径)
     python ${PROJECT_ROOT}/src/sft/test.py \
         --model_path ${MODEL_PATH} \

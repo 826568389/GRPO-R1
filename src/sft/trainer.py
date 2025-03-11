@@ -1,14 +1,16 @@
 """
 SFT训练器模块
-实现了基于DeepSpeed ZeRO的全参数微调训练器
 """
 
 import os
 import logging
 from typing import Optional, Dict, Any
+from datetime import datetime
 
 import torch
+import numpy as np
 import wandb
+import matplotlib.pyplot as plt
 from transformers import (
     Trainer,
     TrainingArguments,
@@ -18,16 +20,11 @@ from transformers import (
 )
 from datasets import Dataset
 from peft import PeftModel
+from sklearn.metrics import f1_score, recall_score
 
 logger = logging.getLogger(__name__)
 
-
 class SFTTrainer(Trainer):
-    """
-    基于DeepSpeed ZeRO的SFT训练器
-    继承自transformers的Trainer类，添加了DeepSpeed相关的功能
-    """
-    
     def __init__(
         self,
         model: PreTrainedModel,
@@ -38,17 +35,23 @@ class SFTTrainer(Trainer):
         data_collator: Optional[DataCollator] = None,
         callbacks: list = None,
     ):
+        # 初始化损失记录
+        self.train_losses = []
+        self.eval_losses = []
+        self.steps = []
+        
         # 如果使用DeepSpeed，移除wandb回调
         if args.deepspeed:
             callbacks = [] if callbacks is None else callbacks
             callbacks = [cb for cb in callbacks if not str(cb.__class__).endswith("WandBCallback")]
-            # 禁用wandb报告
             args.report_to = [r for r in args.report_to if r != "wandb"]
         
-        # 确保数据集格式正确
+        # 验证训练数据集
         if train_dataset is not None:
-            if not all(col in train_dataset.features for col in ["input_ids", "labels"]):
-                raise ValueError("训练数据集必须包含 'input_ids' 和 'labels' 列")
+            required_columns = ["input_ids", "labels"]
+            missing_columns = [col for col in required_columns if col not in train_dataset.column_names]
+            if missing_columns:
+                raise ValueError(f"训练数据集必须包含 'input_ids' 和 'labels' 列")
         
         if eval_dataset is not None:
             if not all(col in eval_dataset.features for col in ["input_ids", "labels"]):
@@ -63,6 +66,8 @@ class SFTTrainer(Trainer):
             data_collator=data_collator,
             callbacks=callbacks,
         )
+        
+        self.tokenizer = tokenizer
         
         # 初始化wandb（仅在主进程且未禁用时）
         if self.is_world_process_zero() and not os.getenv("WANDB_DISABLED", "false").lower() == "true":
@@ -86,8 +91,8 @@ class SFTTrainer(Trainer):
             )
             
             # 记录模型参数量
-            try:
-                if isinstance(model, PeftModel):
+            if isinstance(model, PeftModel):
+                try:
                     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
                     all_params = sum(p.numel() for p in model.parameters())
                     wandb.config.update({
@@ -95,54 +100,122 @@ class SFTTrainer(Trainer):
                         "total_params": all_params,
                         "trainable_ratio": trainable_params / all_params,
                     })
+                except Exception:
+                    pass
+
+    def log(self, logs: Dict[str, float], iterator: Optional[Any] = None) -> None:
+        """重写日志记录方法，添加损失记录"""
+        if self.state.global_step:  # 确保不是初始步骤
+            if "loss" in logs:
+                self.train_losses.append(logs["loss"])
+                self.steps.append(self.state.global_step)
+            if "eval_loss" in logs:
+                self.eval_losses.append(logs["eval_loss"])
                 
-            except Exception as e:
-                logger.warning(f"记录模型参数量时出错: {str(e)}")
-    
+            # 在每个检查点保存损失图
+            if self.is_world_process_zero() and self.state.global_step % self.args.save_steps == 0:
+                self.save_loss_plots()
+                
+        super().log(logs, iterator)
+
+    def save_loss_plots(self):
+        """保存损失图表"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_dir = os.path.join(self.args.output_dir, "loss_plots")
+        os.makedirs(save_dir, exist_ok=True)
+        
+        # 清理matplotlib
+        plt.clf()
+        
+        # 绘制训练损失
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.steps, self.train_losses, label='Training Loss')
+        if self.eval_losses:
+            eval_steps = [s for s in self.steps if s % self.args.eval_steps == 0][:len(self.eval_losses)]
+            plt.plot(eval_steps, self.eval_losses, label='Evaluation Loss')
+        plt.xlabel('Steps')
+        plt.ylabel('Loss')
+        plt.title('Training and Evaluation Loss')
+        plt.legend()
+        plt.grid(True)
+        
+        # 保存图片
+        plot_path = os.path.join(save_dir, f'loss_plot_{timestamp}.png')
+        plt.savefig(plot_path)
+        plt.close()
+        
+        # 如果使用wandb，上传图片
+        if self.is_world_process_zero() and not os.getenv("WANDB_DISABLED", "false").lower() == "true":
+            wandb.log({
+                "loss_plot": wandb.Image(plot_path),
+                "current_train_loss": self.train_losses[-1] if self.train_losses else None,
+                "current_eval_loss": self.eval_losses[-1] if self.eval_losses else None,
+            })
+
     def __del__(self):
-        """
-        清理函数，确保正确关闭wandb
-        """
+        """清理函数，确保正确关闭wandb和保存最终的损失图"""
         try:
-            import wandb
-            if hasattr(self, 'args') and self.args is not None and \
-               hasattr(self, 'is_world_process_zero') and \
+            if hasattr(self, 'args') and self.args is not None:
+                self.save_loss_plots()
+            if hasattr(self, 'is_world_process_zero') and \
                self.is_world_process_zero() and \
                wandb.run is not None:
                 wandb.finish()
         except Exception:
-            pass  # 忽略清理过程中的任何错误
-    
+            pass
 
+    def get_train_dataloader(self):
+        """获取训练数据加载器"""
+        return super().get_train_dataloader()
+        
+    def get_eval_dataloader(self, eval_dataset=None):
+        """获取评估数据加载器"""
+        # 清理GPU缓存
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        return super().get_eval_dataloader(eval_dataset)
 
-        """获取训练数据加载器，添加数据验证"""
-        try:
-            dataloader = super().get_train_dataloader()
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+        """计算损失，支持返回模型输出"""
+        outputs = model(**inputs)
+        loss = outputs.loss
+        return (loss, outputs) if return_outputs else loss
+        
+    def evaluation_loop(
+        self,
+        dataloader,
+        description: str,
+        prediction_loss_only: Optional[bool] = None,
+        **kwargs
+    ):
+        """评估循环，计算评估指标"""
+        # 清理GPU缓存
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
             
-            if self.is_world_process_zero():
-                # 检查第一个批次
-                batch = next(iter(dataloader))
-                logger.info("训练数据批次信息:")
-                logger.info(f"- 批次键: {batch.keys()}")
-                for key, value in batch.items():
-                    if hasattr(value, 'shape'):
-                        logger.info(f"- {key} 形状: {value.shape}")
-                        if torch.is_tensor(value):
-                            logger.info(f"  - 数据类型: {value.dtype}")
-                            logger.info(f"  - 设备: {value.device}")
-                            if value.numel() > 0:
-                                logger.info(f"  - 值范围: [{value.min()}, {value.max()}]")
-                
-                # 验证批次大小
-                if hasattr(self.args, 'per_device_train_batch_size'):
-                    expected_batch_size = self.args.per_device_train_batch_size
-                    actual_batch_size = batch['input_ids'].size(0)
-                    if actual_batch_size != expected_batch_size:
-                        logger.warning(f"实际批次大小 ({actual_batch_size}) 与配置的批次大小 ({expected_batch_size}) 不匹配")
-                
-            return dataloader
+        # 调用父类的评估循环
+        eval_output = super().evaluation_loop(
+            dataloader,
+            description,
+            prediction_loss_only=prediction_loss_only,
+            **kwargs
+        )
+        
+        # 如果只计算损失，直接返回
+        if prediction_loss_only:
+            return eval_output
             
-        except Exception as e:
-            logger.error(f"获取训练数据加载器失败: {str(e)}")
-            logger.debug("错误详情:", exc_info=True)
-            raise 
+        metrics = {}
+        
+        # 计算perplexity
+        if eval_output.predictions is not None:
+            metrics["perplexity"] = torch.exp(torch.tensor(eval_output.metrics["eval_loss"])).item()
+            
+        # 更新指标
+        eval_output.metrics.update(metrics)
+        
+        # 清理GPU缓存
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
+        return eval_output 

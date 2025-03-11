@@ -5,6 +5,8 @@ GRPO-R1的主要训练脚本
 
 import logging
 import os
+import json
+import warnings
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import sys
 from dataclasses import dataclass, field
@@ -18,6 +20,8 @@ from transformers import set_seed
 from transformers.trainer_utils import get_last_checkpoint
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+# 抑制PyTorch的torch.load警告
+warnings.filterwarnings("ignore", message="You are using `torch.load` with `weights_only=False`")
 
 from configs import GRPOConfig
 from rewards import REWARD_FUNCS_REGISTRY
@@ -25,9 +29,7 @@ from utils.callbacks import get_callbacks
 from grpo_trainer import GRPOTrainerExt
 from trl import ModelConfig, ScriptArguments, TrlParser, get_peft_config
 
-
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class GRPOScriptArguments(ScriptArguments):
@@ -47,7 +49,37 @@ class GRPOScriptArguments(ScriptArguments):
             "help": "系统提示词配置文件路径，可以是绝对路径或相对于项目根目录的路径"
         },
     )
+    deepspeed_config: str = field(
+        default="config/zero3.json",
+        metadata={
+            "help": "DeepSpeed配置文件路径，支持 JSON 格式"
+        },
+    )
 
+def load_deepspeed_config(config_path: str) -> dict:
+    """
+    加载DeepSpeed配置
+    
+    参数:
+        config_path: 配置文件路径
+    返回:
+        配置字典
+    """
+    try:
+        project_root = Path(__file__).parent.parent.parent
+        config_path = project_root / config_path
+        
+        if not config_path.exists():
+            logger.error(f"DeepSpeed配置文件不存在: {config_path}")
+            return {}
+            
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        return config
+            
+    except Exception as e:
+        logger.error(f"读取DeepSpeed配置文件失败: {str(e)}")
+        return {}
 
 def load_system_prompt(prompt_file: str) -> str:
     """
@@ -73,7 +105,6 @@ def load_system_prompt(prompt_file: str) -> str:
     except Exception as e:
         logger.error(f"读取提示词配置文件失败: {str(e)}")
         return ""
-
 
 def main(script_args, training_args, model_args):
     """
@@ -166,6 +197,14 @@ def main(script_args, training_args, model_args):
     )
 
     print(model_args.model_name_or_path,)
+
+    # 加载DeepSpeed配置
+    deepspeed_config = load_deepspeed_config(script_args.deepspeed_config)
+    if deepspeed_config:
+        logger.info(f"已加载DeepSpeed配置: {script_args.deepspeed_config}")
+        training_args.deepspeed = deepspeed_config
+    else:
+        logger.warning("未能加载DeepSpeed配置，将使用默认设置")
 
     # 初始化GRPO-R1训练器
     trainer = GRPOTrainerExt(

@@ -20,29 +20,35 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
 # 执行训练命令
 deepspeed --include localhost:0,1,2,3 ${PROJECT_ROOT}/src/sft/train.py \
-    --model_name_or_path "/data/staryea/aigc_model/Qwen2.5-3B-Instruct" \
+    --model_name_or_path "/data/staryea/aigc_model/Qwen2.5-7B-Instruct" \
     --dataset_name "/data/staryea/DeepSeek/dataset/BusinessData/sft_data/opt_sft_v6.jsonl" \
-    --output_dir "output/Qwen2.5-3B-Instruct-Business-lora-03051" \
-    --num_train_epochs 550 \
-    --per_device_train_batch_size 16 \
-    --gradient_accumulation_steps 16 \
-    --learning_rate 5e-6 \
+    --output_dir "output/Qwen2.5-7B-Instruct-Business-lora-03061610" \
+    --num_train_epochs 10 \
+    --per_device_train_batch_size 4 \
+    --per_device_eval_batch_size 4 \
+    --gradient_accumulation_steps 1 \
+    --learning_rate 5e-5 \
     --max_seq_length 2048 \
     --save_strategy "steps" \
     --save_steps 10 \
     --save_total_limit 2 \
-    --logging_steps 1 \
-    --max_grad_norm 1.0 \
-    --lr_scheduler_type "cosine" \
-    --warmup_ratio 0.05 \
+    --logging_steps 2 \
+    --eval_steps 10 \
+    --evaluation_strategy "steps" \
+    --max_grad_norm 0.3 \
+    --lr_scheduler_type "constant_with_warmup" \
+    --warmup_ratio 0.1 \
     --use_gradient_checkpointing true \
     --bf16 true \
     --deepspeed "${PROJECT_ROOT}/config/sft_zero2.json" \
     --training_mode "lora" \
     --report_to "wandb" \
-    --lora_r 8 \
-    --lora_alpha 32 \
-    --lora_dropout 0.1 \
+    --lora_r 32 \
+    --lora_alpha 128 \
+    --lora_dropout 0.2 \
     --seed 42 \
-    --weight_decay 0.01 \
-    --lora_target_modules "q_proj,v_proj,o_proj,k_proj,down_proj,up_proj,gate_proj" 
+    --weight_decay 0.1 \
+    --lora_target_modules "q_proj,k_proj,v_proj,o_proj" \
+    --do_eval true \
+    --metric_for_best_model "eval_loss" \
+    --load_best_model_at_end true 

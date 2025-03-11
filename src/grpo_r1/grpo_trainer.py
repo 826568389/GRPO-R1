@@ -276,6 +276,9 @@ class GRPOTrainerExt(GRPOTrainer):
         初始化GRPO训练器扩展类
         设置各种指标的跟踪器
         """
+        # 抑制PyTorch的torch.load警告
+        warnings.filterwarnings("ignore", message="You are using `torch.load` with `weights_only=False`")
+        
         super().__init__(*args, **kwargs)
         self._metrics = defaultdict(list)
         

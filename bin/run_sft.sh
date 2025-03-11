@@ -33,4 +33,5 @@ deepspeed --num_gpus 4 ${PROJECT_ROOT}/src/sft/train.py \
     --fp16 true \
     --deepspeed "${PROJECT_ROOT}/config/sft_zero3.json" \
     --training_mode "full" \
-    --report_to "wandb" 
+    --report_to "wandb" \
+    --special_tokens "<think>,</think>,<answer>,</answer>"
