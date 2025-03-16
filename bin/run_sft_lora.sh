@@ -21,8 +21,8 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 # 执行训练命令
 deepspeed --include localhost:0,1,2,3 ${PROJECT_ROOT}/src/sft/train.py \
     --model_name_or_path "/data/staryea/aigc_model/Qwen2.5-7B-Instruct" \
-    --dataset_name "/data/staryea/DeepSeek/dataset/BusinessData/sft_data/opt_sft_v6.jsonl" \
-    --output_dir "output/Qwen2.5-7B-Instruct-Business-lora-03061610" \
+    --dataset_name "/data/staryea/DeepSeek/dataset/BusinessData/sft_data/sft_data.jsonl" \
+    --output_dir "output/Qwen2.5-7B-Instruct-Business-lora" \
     --num_train_epochs 10 \
     --per_device_train_batch_size 4 \
     --per_device_eval_batch_size 4 \
